@@ -21,7 +21,7 @@ body{padding:12px 12px 70px;max-width:660px;margin:0 auto;position:relative;min-
 .scan{position:fixed;inset:0;z-index:50;pointer-events:none;background:repeating-linear-gradient(0deg,rgba(255,255,255,.025) 0 1px,transparent 1px 3px)}
 @media (prefers-reduced-motion:reduce){.floor,.live,.leg.danger,.big{animation:none!important}}
 /* HUD */
-.top{position:sticky;top:8px;z-index:5;padding:14px;background:var(--pn);backdrop-filter:blur(10px);border:1px solid var(--cy);
+.top{position:relative;padding:14px;background:var(--pn);backdrop-filter:blur(10px);border:1px solid var(--cy);
  clip-path:polygon(0 0,calc(100% - 18px) 0,100% 18px,100% 100%,18px 100%,0 calc(100% - 18px));
  box-shadow:0 0 0 1px rgba(0,240,255,.15) inset,0 0 26px rgba(0,240,255,.35),0 12px 40px rgba(0,0,0,.6)}
 .row{display:flex;align-items:center;justify-content:space-between;gap:8px}
@@ -52,6 +52,8 @@ h1 em{font-style:normal;color:var(--mg);text-shadow:0 0 12px var(--mg)}
 .team{text-align:center;font:900 12px Orbitron,sans-serif;color:var(--mut);letter-spacing:.14em}
 .team input{display:block;width:76px;margin:4px auto 0;background:rgba(0,0,0,.5);border:1px solid var(--cy);color:var(--tx);font:900 28px Orbitron,sans-serif;text-align:center;padding:4px 0;border-radius:3px;text-shadow:0 0 12px var(--cy);box-shadow:0 0 14px rgba(0,240,255,.25) inset}
 .team input:disabled{opacity:1;border-color:var(--lm);text-shadow:0 0 12px var(--lm)}
+.sc{margin:4px auto 0;min-width:76px;padding:4px 10px;background:rgba(0,0,0,.5);border:1px solid var(--cy);color:var(--tx);font:900 28px Orbitron,sans-serif;text-align:center;border-radius:3px;text-shadow:0 0 12px var(--lm);border-color:var(--lm);box-shadow:0 0 14px rgba(182,255,0,.2) inset}
+.clk{font:700 15px Orbitron,sans-serif;letter-spacing:.12em;color:var(--or);text-shadow:0 0 10px rgba(255,138,0,.7)}
 .dash{color:var(--mg);font:900 20px Orbitron,sans-serif;margin-top:18px;text-shadow:0 0 10px var(--mg)}
 .ctrl{display:flex;gap:8px;align-items:center;justify-content:center;flex-wrap:wrap}
 select,.ctrl input{background:rgba(0,0,0,.55);border:1px solid var(--ln);color:var(--tx);border-radius:3px;padding:7px 8px;font:700 14px Orbitron,monospace}
@@ -85,10 +87,10 @@ select,.ctrl input{background:rgba(0,0,0,.55);border:1px solid var(--ln);color:v
 .steps{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:7px;padding-right:6px;margin-top:11px}
 .stp{background:rgba(0,0,0,.45);border:1px solid var(--ln);border-radius:4px;padding:6px;text-align:center}
 .stp label{font:700 10px Orbitron,sans-serif;color:var(--or);letter-spacing:.16em}
-.stp .v{display:flex;align-items:center;justify-content:space-between;margin-top:3px}
+.stp .v{display:flex;align-items:center;justify-content:center;margin-top:3px}
 .stp button{width:33px;height:36px;border:1px solid var(--cy);background:rgba(0,240,255,.08);color:var(--cy);font:900 20px Orbitron,sans-serif;border-radius:3px}
 .stp button:active{background:var(--cy);color:#001418;box-shadow:0 0 18px var(--cy)}
-.stp .n{font:900 22px Orbitron,sans-serif;min-width:24px;text-shadow:0 0 10px rgba(255,255,255,.5)}
+.stp .n{font:900 26px Orbitron,sans-serif;min-width:24px;text-shadow:0 0 10px rgba(255,255,255,.5)}
 .foot{margin-top:24px;display:flex;gap:8px;justify-content:center}
 .btn{background:rgba(4,16,30,.8);border:1px solid var(--ln);color:var(--mut);padding:9px 14px;font:700 12px Orbitron,sans-serif;letter-spacing:.08em;border-radius:3px}
 .btn.warn{color:var(--rd);border-color:rgba(255,45,85,.5)}
@@ -144,14 +146,14 @@ async function poll(){
   try{
     const sb=await j(BASE+'/scoreboard?dates=20261119&limit=50');
     const ng={},ns={};
-    for(const g of GAMES){
+    await Promise.all(GAMES.map(async g=>{
       const ev=(sb.events||[]).find(e=>{const cs=(e.competitions?.[0]?.competitors||[]).map(c=>c.team?.abbreviation);return ALIAS[g.away].some(a=>cs.includes(a))&&ALIAS[g.home].some(a=>cs.includes(a))});
-      if(!ev)continue;
-      const comp=ev.competitions[0],cs=comp.competitors;
+      if(!ev)return;
+      const cs=ev.competitions[0].competitors;
       const A=cs.find(c=>ALIAS[g.away].includes(c.team.abbreviation)),H=cs.find(c=>ALIAS[g.home].includes(c.team.abbreviation));
       const stt=ev.status?.type?.state||'pre';
       ng[g.id]={a:+A.score||0,h:+H.score||0,q:Math.max(1,ev.status?.period||1),clk:String(ev.status?.displayClock||'12:00'),state:stt==='in'?'live':stt==='post'?'final':'pre',id:ev.id};
-      if(stt==='pre')continue;
+      if(stt==='pre')return;
       try{
         const sm=await j(BASE+'/summary?event='+ev.id);
         const rows={};
@@ -160,9 +162,9 @@ async function poll(){
           if(ip<0||ir<0||ia<0)continue;
           for(const at of (blk.athletes||[])){const s=at.stats||[];rows[norm(at.athlete?.displayName)]=[+s[ip]||0,+s[ir]||0,+s[ia]||0]}
         }}
-        for(const l of LEGS.filter(x=>x.g===g.id)){const r=rows[norm(l.name)];ns[l.id]=r||[0,0,0]}
+        for(const l of LEGS.filter(x=>x.g===g.id)){ns[l.id]=rows[norm(l.name)]||[0,0,0]}
       }catch(e){}
-    }
+    }));
     F.games=ng;F.stats=ns;F.ok=Object.keys(ng).length>0;F.err=F.ok?'':'Games not found on feed yet';F.at=Date.now();
   }catch(e){F.ok=false;F.err=String(e&&e.message||e);F.at=Date.now()}
   polling=false;
@@ -223,7 +225,7 @@ function legInfo(l){
 }
 
 // ---- RENDER ----
-let filter='all';
+let filter='all',LAST='';
 const $=s=>document.getElementById(s);
 function fmtTime(ms){
   if(ms<=0)return null;const s=Math.floor(ms/1000);
@@ -241,17 +243,15 @@ function render(){
   <div class="stats"><div class="stat"><b>${LEGS.length}</b><span>Legs</span></div><div class="stat"><b style="color:var(--lm)">${won}</b><span>Hit</span></div><div class="stat"><b style="color:var(--cy)">${alive}</b><span>Alive</span></div><div class="stat"><b style="color:var(--rd)">${lost}</b><span>Busted</span></div></div>
   <div class="meta"><span>Combined leg odds (product): <b style="color:var(--tx)">${(prob*100).toFixed(3)}%</b></span><span id="cd"></span></div>
   <div class="meta"><span id="kfeed"></span></div>
-  <div class="meta"><span id="feed"></span><button class="chip" id="feedtog" style="padding:3px 10px;font-size:11px">${F.on?'Auto-feed: ON':'Auto-feed: OFF'}</button></div></div>
+  <div class="meta"><span id="feed"></span></div></div>
   <div class="filters">${[['all','All'],['alive','Alive'],['danger','Danger'],['won','Hit'],['lost','Busted'],['yes','YES legs'],['no','NO legs']].map(f=>`<button class="chip ${filter===f[0]?'on':''}" data-f="${f[0]}">${f[1]}</button>`).join('')}</div>`;
   GAMES.forEach(g=>{
-    const o=eff(g),gst=gameState(g),fd=!!feedG(g.id),dis=fd?' disabled':'';
+    const o=eff(g),gst=gameState(g),fd=!!feedG(g.id);
     const bc=gst==='pre'?'b-pre':gst==='live'?'b-live':'b-final';
     const bl=gst==='pre'?'Pregame · 7:00 PM CT':gst==='live'?(fd?'Live · auto':'Live'):'Final';
     h+=`<div class="game"><div class="gh"><div class="gt"><span>${g.title}</span><span class="badge ${bc} ${gst==='live'?'live':''}">${bl}</span></div>
-    <div class="score"><div class="team">${g.away}<input type="number" inputmode="numeric" min="0" data-g="${g.id}" data-k="a" value="${o.a}"${dis}></div><div class="dash">–</div><div class="team">${g.home}<input type="number" inputmode="numeric" min="0" data-g="${g.id}" data-k="h" value="${o.h}"${dis}></div></div>
-    <div class="ctrl"><select data-g="${g.id}" data-k="q"${dis}>${[1,2,3,4,5].map(q=>`<option value="${q}" ${o.q==q?'selected':''}>${q<5?'Q'+q:'OT'}</option>`).join('')}</select>
-    <input type="text" inputmode="numeric" placeholder="12:00" data-g="${g.id}" data-k="clk" value="${o.clk}"${dis}>
-    <select data-g="${g.id}" data-k="st"${dis}><option value="auto" ${o.st==='auto'?'selected':''}>Auto</option><option value="live" ${o.st==='live'?'selected':''}>Live</option><option value="final" ${o.st==='final'?'selected':''}>Final</option></select></div>
+    <div class="score"><div class="team">${g.away}<div class="sc">${o.a}</div></div><div class="dash">–</div><div class="team">${g.home}<div class="sc">${o.h}</div></div></div>
+    <div class="ctrl"><span class="clk">${gst==='pre'?'TIP-OFF 7:00 PM CT':gst==='final'?'FINAL':(o.q<5?'Q'+o.q:'OT'+(o.q>5?o.q-4:''))+' · '+o.clk}</span></div>
     <div class="wp">Pregame win prob: ${g.wp}</div></div>`;
     infos.filter(x=>x.l.g===g.id).forEach(({l,i})=>{
       const cls=i.danger&&i.res==='alive'?'danger':i.res;
@@ -269,12 +269,12 @@ function render(){
       <div class="pct"><b>${livePct(l)}%</b><span>${kp(l)?`Kalshi live · ${(livePct(l)-l.pct)>0?'▲':(livePct(l)-l.pct)<0?'▼':'='}${Math.abs(livePct(l)-l.pct)} vs ${l.pct}%`:`Kalshi at entry`}</span></div></div>
       <div class="bar"><i style="width:${fill}%;background:${col};color:${col}"></i></div>
       <div class="st"><span><b>${i.pra}</b> / ${l.thr} PRA (${fill.toFixed(0)}%)</span><span class="tag ${tag[1]}">${tag[0]}</span><span>${sub}</span></div>
-      <div class="steps">${['PTS','REB','AST'].map((n,k)=>`<div class="stp"><label>${n}</label><div class="v">${fed?'<span></span>':`<button data-l="${l.id}" data-k="${k}" data-d="-1">−</button>`}<span class="n">${v[k]}</span>${fed?'<span></span>':`<button data-l="${l.id}" data-k="${k}" data-d="1">+</button>`}</div></div>`).join('')}</div></div>`;
+      <div class="steps">${['PTS','REB','AST'].map((n,k)=>`<div class="stp"><label>${n}</label><div class="v"><span class="n">${v[k]}</span></div></div>`).join('')}</div></div>`;
     });
   });
   h+=`<div class="foot"><button class="btn warn" id="reset">Reset all stats</button></div>
-  <div class="note">Scores, clock and player stats refresh automatically every 5 seconds from the live feed. If the feed is unavailable, tap + / − and set score and clock by hand.<br>Percentages: live Kalshi price for your side of each leg (YES or NO), refreshed every 5s, compared with your entry % · bar = progress to the line. NO legs bust when the player reaches the line. All 23 legs must hit.<br>Data entered here saves on this device only.</div>`;
-  $('app').innerHTML=h;
+  <div class="note">Scores, clock and player stats update automatically every second from the live feed.<br>Percentages: live Kalshi price for your side of each leg (YES or NO), refreshed every 5s, compared with your entry % · bar = progress to the line. NO legs bust when the player reaches the line. All 23 legs must hit.</div>`;
+  if(h!==LAST){LAST=h;$('app').innerHTML=h}
   tickTime();
 }
 function tickTime(){
@@ -283,9 +283,9 @@ function tickTime(){
   n.textContent=d.toLocaleTimeString('en-US',{timeZone:'America/Chicago',hour:'numeric',minute:'2-digit',second:'2-digit'})+' CT';
   const fe=$('feed');if(fe){
     if(!F.on)fe.innerHTML='Manual mode';
-    else if(F.ok)fe.innerHTML='<span style="color:var(--lm)">●</span> Live feed · updated '+Math.max(0,Math.round((Date.now()-F.at)/1000))+'s ago · every 5s';
+    else if(F.ok)fe.innerHTML='<span style="color:var(--lm)">●</span> Live feed · updated '+Math.max(0,Math.round((Date.now()-F.at)/1000))+'s ago · every 1s';
     else if(!F.at)fe.textContent='Connecting to live feed…';
-    else fe.innerHTML='<span style="color:var(--or)">●</span> Feed unavailable ('+F.err+') · manual entry';
+    else fe.innerHTML='<span style="color:var(--or)">●</span> Stats feed unavailable ('+F.err+') · retrying every 1s';
   }
   const ke=$('kfeed');if(ke){
     if(KS.ok)ke.innerHTML='<span style="color:var(--lm)">●</span> Kalshi prices live · '+KS.n+'/'+LEGS.length+' legs matched · '+Math.max(0,Math.round((Date.now()-KS.at)/1000))+'s ago';
@@ -318,7 +318,7 @@ document.addEventListener('change',e=>{
   save();render();
 });
 render();
-poll();pollKalshi();setInterval(poll,5000);setInterval(pollKalshi,5000);
+poll();pollKalshi();setInterval(poll,1000);setInterval(pollKalshi,5000);
 </script>
 </body>
 </html>
