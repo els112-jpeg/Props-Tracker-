@@ -9,7 +9,8 @@
 <style>
 :root{--bg:#02050c;--cy:#00f0ff;--mg:#ff2bd6;--or:#ff8a00;--lm:#b6ff00;--rd:#ff2d55;--tx:#e9fbff;--mut:#6f9bb0;--pn:rgba(4,16,30,.78);--ln:rgba(0,240,255,.28)}
 *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
-html,body{margin:0;background:var(--bg);color:var(--tx);font-family:Rajdhani,-apple-system,"Segoe UI",sans-serif;font-weight:600}
+html{background:var(--bg)}
+html,body{margin:0;color:var(--tx);font-family:Rajdhani,-apple-system,"Segoe UI",sans-serif;font-weight:600}
 body{padding:12px 12px 70px;max-width:660px;margin:0 auto;position:relative;min-height:100vh}
 /* TRON FLOOR + SKY */
 .sky{position:fixed;inset:0;z-index:-3;background:radial-gradient(120% 60% at 50% 0%,#0a2a4a 0%,#041223 45%,#02050c 100%)}
@@ -20,6 +21,11 @@ body{padding:12px 12px 70px;max-width:660px;margin:0 auto;position:relative;min-
 .horizon{position:fixed;left:0;right:0;bottom:38vh;height:2px;z-index:-2;background:linear-gradient(90deg,transparent,var(--cy),var(--mg),transparent);box-shadow:0 0 30px 6px rgba(0,240,255,.5);opacity:.7}
 .scan{position:fixed;inset:0;z-index:50;pointer-events:none;background:repeating-linear-gradient(0deg,rgba(255,255,255,.025) 0 1px,transparent 1px 3px)}
 @media (prefers-reduced-motion:reduce){.floor,.live,.leg.danger,.big{animation:none!important}}
+/* FLOATING TEAM TAGS (text only, no logos) */
+.teams{position:fixed;inset:0;z-index:-1;overflow:hidden;pointer-events:none}
+.tm{position:absolute;font:900 clamp(54px,17vw,110px) Orbitron,sans-serif;letter-spacing:.06em;color:transparent;-webkit-text-stroke:2px var(--tc);opacity:.5;text-shadow:0 0 28px var(--tc);animation:drift 14s ease-in-out infinite alternate}
+@keyframes drift{from{transform:translate3d(-14px,-18px,0) rotate(-6deg)}to{transform:translate3d(16px,22px,0) rotate(5deg)}}
+@media (prefers-reduced-motion:reduce){.tm{animation:none}}
 /* HUD */
 .top{position:relative;padding:14px;background:var(--pn);backdrop-filter:blur(10px);border:1px solid var(--cy);
  clip-path:polygon(0 0,calc(100% - 18px) 0,100% 18px,100% 100%,18px 100%,0 calc(100% - 18px));
@@ -60,7 +66,7 @@ select,.ctrl input{background:rgba(0,0,0,.55);border:1px solid var(--ln);color:v
 .ctrl input{width:84px;text-align:center}
 .wp{font-size:12px;color:var(--mut);text-align:center;margin-top:8px;letter-spacing:.06em}
 /* LEG CARDS */
-.leg{--c:var(--cy);position:relative;margin-top:11px;padding:12px;background:linear-gradient(160deg,rgba(6,24,44,.92),rgba(3,10,20,.92));border:1px solid color-mix(in srgb,var(--c) 55%,transparent);
+.leg{--c:var(--cy);position:relative;margin-top:11px;padding:12px;background:linear-gradient(160deg,rgba(6,24,44,.66),rgba(3,10,20,.7));border:1px solid color-mix(in srgb,var(--c) 55%,transparent);
  clip-path:polygon(0 0,calc(100% - 14px) 0,100% 14px,100% 100%,14px 100%,0 calc(100% - 14px));
  box-shadow:0 0 0 1px color-mix(in srgb,var(--c) 18%,transparent) inset,0 0 22px color-mix(in srgb,var(--c) 30%,transparent),0 14px 26px rgba(0,0,0,.55);transform:translateZ(0)}
 .leg::before{content:"";position:absolute;left:0;top:10px;bottom:10px;width:3px;background:var(--c);box-shadow:0 0 14px 2px var(--c)}
@@ -98,7 +104,7 @@ select,.ctrl input{background:rgba(0,0,0,.55);border:1px solid var(--ln);color:v
 </style>
 </head>
 <body>
-<div class="sky"></div><div class="horizon"></div><div class="floor"></div><div class="scan"></div>
+<div class="sky"></div><div class="horizon"></div><div class="floor"></div><div class="teams"><span class="tm" style="--tc:#ffc72c;left:6%;top:8%;animation-delay:0s">GSW</span><span class="tm" style="--tc:#6f8fd8;left:62%;top:14%;animation-delay:-3s">MEM</span><span class="tm" style="--tc:#ff3b6b;left:8%;top:32%;animation-delay:-6s">LAC</span><span class="tm" style="--tc:#c9d6dc;left:64%;top:40%;animation-delay:-9s">SAS</span><span class="tm" style="--tc:#ff8a1f;left:10%;top:58%;animation-delay:-12s">NYK</span><span class="tm" style="--tc:#78be20;left:60%;top:66%;animation-delay:-15s">MIN</span><span class="tm" style="--tc:#ff4a4a;left:12%;top:80%;animation-delay:-4s">POR</span><span class="tm" style="--tc:#19d36b;left:58%;top:88%;animation-delay:-8s">MIL</span></div><div class="scan"></div>
 <div id="app"></div>
 <script>
 // ---- DATA (from the Kalshi 23-market combo, 11.19.26) ----
