@@ -92,21 +92,64 @@ function save(){try{localStorage.setItem(KEY,JSON.stringify(S))}catch(e){}}
 const gs=id=>S.games[id]||(S.games[id]={a:0,h:0,q:1,clk:'12:00',st:'auto'});
 const st=id=>S.stats[id]||(S.stats[id]=[0,0,0]);
 
+// ---- LIVE FEED (ESPN public scoreboard + box score, polled every 5s) ----
+const BASE='https://site.api.espn.com/apis/site/v2/sports/basketball/nba';
+const ALIAS={GSW:['GS','GSW'],SAS:['SA','SAS'],NYK:['NY','NYK'],MIN:['MIN'],MEM:['MEM'],LAC:['LAC'],MIL:['MIL'],POR:['POR']};
+let F={games:{},stats:{},ok:false,err:'',at:0,on:true};
+try{F.on=localStorage.getItem(KEY+'-feed')!=='off'}catch(e){}
+const norm=n=>String(n||'').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'').replace(/[^a-z ]/g,'').replace(/\b(jr|sr|ii|iii)\b/g,'').replace(/\s+/g,' ').trim();
+const feedG=id=>(F.on&&F.ok&&F.games[id])||null;
+const effStats=id=>(F.on&&F.ok&&F.stats[id])||st(id);
+const hasFeed=id=>!!(F.on&&F.ok&&F.stats[id]);
+const eff=g=>{const o=gs(g.id),f=feedG(g.id);return f?Object.assign({},o,f):o};
+async function j(u){const r=await fetch(u,{cache:'no-store'});if(!r.ok)throw new Error('HTTP '+r.status);return r.json()}
+let polling=false;
+async function poll(){
+  if(!F.on||polling)return;polling=true;
+  try{
+    const sb=await j(BASE+'/scoreboard?dates=20261119&limit=50');
+    const ng={},ns={};
+    for(const g of GAMES){
+      const ev=(sb.events||[]).find(e=>{const cs=(e.competitions?.[0]?.competitors||[]).map(c=>c.team?.abbreviation);return ALIAS[g.away].some(a=>cs.includes(a))&&ALIAS[g.home].some(a=>cs.includes(a))});
+      if(!ev)continue;
+      const comp=ev.competitions[0],cs=comp.competitors;
+      const A=cs.find(c=>ALIAS[g.away].includes(c.team.abbreviation)),H=cs.find(c=>ALIAS[g.home].includes(c.team.abbreviation));
+      const stt=ev.status?.type?.state||'pre';
+      ng[g.id]={a:+A.score||0,h:+H.score||0,q:Math.max(1,ev.status?.period||1),clk:String(ev.status?.displayClock||'12:00'),state:stt==='in'?'live':stt==='post'?'final':'pre',id:ev.id};
+      if(stt==='pre')continue;
+      try{
+        const sm=await j(BASE+'/summary?event='+ev.id);
+        const rows={};
+        for(const t of (sm.boxscore?.players||[])){for(const blk of (t.statistics||[])){
+          const L=blk.labels||[],ip=L.indexOf('PTS'),ir=L.indexOf('REB'),ia=L.indexOf('AST');
+          if(ip<0||ir<0||ia<0)continue;
+          for(const at of (blk.athletes||[])){const s=at.stats||[];rows[norm(at.athlete?.displayName)]=[+s[ip]||0,+s[ir]||0,+s[ia]||0]}
+        }}
+        for(const l of LEGS.filter(x=>x.g===g.id)){const r=rows[norm(l.name)];ns[l.id]=r||[0,0,0]}
+      }catch(e){}
+    }
+    F.games=ng;F.stats=ns;F.ok=Object.keys(ng).length>0;F.err=F.ok?'':'Games not found on feed yet';F.at=Date.now();
+  }catch(e){F.ok=false;F.err=String(e&&e.message||e);F.at=Date.now()}
+  polling=false;
+  const a=document.activeElement;
+  if(!a||!['INPUT','SELECT'].includes(a.tagName))render();else tickTime();
+}
 function gameState(g){
+  const f=feedG(g.id);if(f)return f.state;
   const s=gs(g.id).st;
   if(s==='final')return 'final';
   if(s==='live')return 'live';
   return Date.now()>=TIP?'live':'pre';
 }
 function elapsed(g){
-  const o=gs(g.id);const m=/^(\d{1,2}):(\d{2})$/.exec(o.clk||'');
-  const rem=m?(+m[1]+ +m[2]/60):12;
+  const o=eff(g);const m=/^(\d{1,2}):(\d{2})/.exec(o.clk||'');
+  const rem=m?(+m[1]+ +m[2]/60):(/^\d+(\.\d+)?$/.test(o.clk||'')?parseFloat(o.clk)/60:12);
   if(o.q<=4)return (o.q-1)*12+(12-Math.min(12,rem));
   return 48+(o.q-5)*5+(5-Math.min(5,rem));
 }
 function legInfo(l){
   const g=GAMES.find(x=>x.id===l.g);const gst=gameState(g);
-  const [p,r,a]=st(l.id);const pra=p+r+a;const need=l.thr-pra;
+  const [p,r,a]=effStats(l.id);const pra=p+r+a;const need=l.thr-pra;
   let res;
   if(l.yes){res=pra>=l.thr?'won':(gst==='final'?'lost':'alive')}
   else{res=pra>=l.thr?'lost':(gst==='final'?'won':'alive')}
@@ -133,17 +176,18 @@ function render(){
   let h=`<div class="top"><div class="row"><h1>23-Leg Combo · Props</h1><div class="clock" id="now"></div></div>
   <div class="tick"><div class="big ${tk[1]}">${tk[0]}</div><div style="text-align:right;font-size:12px;color:var(--mut)">$${COST.toFixed(2)} → <b style="color:var(--tx)">$${PAYOUT.toLocaleString()}</b></div></div>
   <div class="stats"><div class="stat"><b>${LEGS.length}</b><span>Legs</span></div><div class="stat"><b style="color:var(--g)">${won}</b><span>Hit</span></div><div class="stat"><b style="color:var(--b)">${alive}</b><span>Alive</span></div><div class="stat"><b style="color:var(--r)">${lost}</b><span>Busted</span></div></div>
-  <div class="meta"><span>Combined leg odds (product): <b style="color:var(--tx)">${(prob*100).toFixed(3)}%</b></span><span id="cd"></span></div></div>
+  <div class="meta"><span>Combined leg odds (product): <b style="color:var(--tx)">${(prob*100).toFixed(3)}%</b></span><span id="cd"></span></div>
+  <div class="meta"><span id="feed"></span><button class="chip" id="feedtog" style="padding:3px 10px;font-size:11px">${F.on?'Auto-feed: ON':'Auto-feed: OFF'}</button></div></div>
   <div class="filters">${[['all','All'],['alive','Alive'],['danger','Danger'],['won','Hit'],['lost','Busted'],['yes','YES legs'],['no','NO legs']].map(f=>`<button class="chip ${filter===f[0]?'on':''}" data-f="${f[0]}">${f[1]}</button>`).join('')}</div>`;
   GAMES.forEach(g=>{
-    const o=gs(g.id),gst=gameState(g);
+    const o=eff(g),gst=gameState(g),fd=!!feedG(g.id),dis=fd?' disabled':'';
     const bc=gst==='pre'?'b-pre':gst==='live'?'b-live':'b-final';
-    const bl=gst==='pre'?'Pregame · 7:00 PM CT':gst==='live'?'Live':'Final';
+    const bl=gst==='pre'?'Pregame · 7:00 PM CT':gst==='live'?(fd?'Live · auto':'Live'):'Final';
     h+=`<div class="game"><div class="gh"><div class="gt"><span>${g.title}</span><span class="badge ${bc}">${bl}</span></div>
-    <div class="score"><div class="team">${g.away}<input type="number" inputmode="numeric" min="0" data-g="${g.id}" data-k="a" value="${o.a}"></div><div class="dash">–</div><div class="team">${g.home}<input type="number" inputmode="numeric" min="0" data-g="${g.id}" data-k="h" value="${o.h}"></div></div>
-    <div class="ctrl"><select data-g="${g.id}" data-k="q">${[1,2,3,4,5].map(q=>`<option value="${q}" ${o.q==q?'selected':''}>${q<5?'Q'+q:'OT'}</option>`).join('')}</select>
-    <input type="text" inputmode="numeric" placeholder="12:00" data-g="${g.id}" data-k="clk" value="${o.clk}">
-    <select data-g="${g.id}" data-k="st"><option value="auto" ${o.st==='auto'?'selected':''}>Auto</option><option value="live" ${o.st==='live'?'selected':''}>Live</option><option value="final" ${o.st==='final'?'selected':''}>Final</option></select></div>
+    <div class="score"><div class="team">${g.away}<input type="number" inputmode="numeric" min="0" data-g="${g.id}" data-k="a" value="${o.a}"${dis}></div><div class="dash">–</div><div class="team">${g.home}<input type="number" inputmode="numeric" min="0" data-g="${g.id}" data-k="h" value="${o.h}"${dis}></div></div>
+    <div class="ctrl"><select data-g="${g.id}" data-k="q"${dis}>${[1,2,3,4,5].map(q=>`<option value="${q}" ${o.q==q?'selected':''}>${q<5?'Q'+q:'OT'}</option>`).join('')}</select>
+    <input type="text" inputmode="numeric" placeholder="12:00" data-g="${g.id}" data-k="clk" value="${o.clk}"${dis}>
+    <select data-g="${g.id}" data-k="st"${dis}><option value="auto" ${o.st==='auto'?'selected':''}>Auto</option><option value="live" ${o.st==='live'?'selected':''}>Live</option><option value="final" ${o.st==='final'?'selected':''}>Final</option></select></div>
     <div class="wp">Pregame win prob: ${g.wp}</div></div>`;
     infos.filter(x=>x.l.g===g.id).forEach(({l,i})=>{
       const cls=i.danger&&i.res==='alive'?'danger':i.res;
@@ -156,16 +200,16 @@ function render(){
       else if(i.res==='lost'){tag=['BUSTED','t-lost'];sub=l.yes?'Finished short':`Went over by ${i.pra-l.thr}`}
       else if(l.yes){tag=['NEEDS '+i.need,'t-alive'];sub=i.proj!=null?`Pace ${i.proj.toFixed(1)}`:'—'}
       else{tag=[i.danger?'DANGER · '+i.need+' LEFT':'CUSHION '+i.need,i.danger?'t-danger':'t-alive'];sub=i.proj!=null?`Pace ${i.proj.toFixed(1)}`:'—'}
-      const v=st(l.id);
+      const v=effStats(l.id),fed=hasFeed(l.id);
       h+=`<div class="leg ${cls}"><div class="lh"><div><div class="nm"><span class="side ${l.yes?'s-yes':'s-no'}">${l.yes?'YES':'NO'}</span>${l.name}</div><div class="ln">${l.thr}+ pts + reb + ast</div></div>
       <div class="pct"><b>${l.pct}%</b><span>Kalshi</span></div></div>
       <div class="bar"><i style="width:${fill}%;background:${col}"></i></div>
       <div class="st"><span><b>${i.pra}</b> / ${l.thr} PRA (${fill.toFixed(0)}%)</span><span class="tag ${tag[1]}">${tag[0]}</span><span>${sub}</span></div>
-      <div class="steps">${['PTS','REB','AST'].map((n,k)=>`<div class="stp"><label>${n}</label><div class="v"><button data-l="${l.id}" data-k="${k}" data-d="-1">−</button><span class="n">${v[k]}</span><button data-l="${l.id}" data-k="${k}" data-d="1">+</button></div></div>`).join('')}</div></div>`;
+      <div class="steps">${['PTS','REB','AST'].map((n,k)=>`<div class="stp"><label>${n}</label><div class="v">${fed?'<span></span>':`<button data-l="${l.id}" data-k="${k}" data-d="-1">−</button>`}<span class="n">${v[k]}</span>${fed?'<span></span>':`<button data-l="${l.id}" data-k="${k}" data-d="1">+</button>`}</div></div>`).join('')}</div></div>`;
     });
   });
   h+=`<div class="foot"><button class="btn warn" id="reset">Reset all stats</button></div>
-  <div class="note">Tap + / − as stats come in and set score, quarter and clock per game.<br>Percentages: Kalshi = leg probability at entry · bar = progress to the line. NO legs bust when the player reaches the line. All 23 legs must hit.<br>Data entered here saves on this device only.</div>`;
+  <div class="note">Scores, clock and player stats refresh automatically every 5 seconds from the live feed. If the feed is unavailable, tap + / − and set score and clock by hand.<br>Percentages: Kalshi = leg probability at entry · bar = progress to the line. NO legs bust when the player reaches the line. All 23 legs must hit.<br>Data entered here saves on this device only.</div>`;
   $('app').innerHTML=h;
   tickTime();
 }
@@ -173,6 +217,12 @@ function tickTime(){
   const n=$('now');if(!n)return;
   const d=new Date();
   n.textContent=d.toLocaleTimeString('en-US',{timeZone:'America/Chicago',hour:'numeric',minute:'2-digit',second:'2-digit'})+' CT';
+  const fe=$('feed');if(fe){
+    if(!F.on)fe.innerHTML='Manual mode';
+    else if(F.ok)fe.innerHTML='<span style="color:var(--g)">●</span> Live feed · updated '+Math.max(0,Math.round((Date.now()-F.at)/1000))+'s ago · every 5s';
+    else if(!F.at)fe.textContent='Connecting to live feed…';
+    else fe.innerHTML='<span style="color:var(--a)">●</span> Feed unavailable ('+F.err+') · manual entry';
+  }
   const c=$('cd');if(c){const t=fmtTime(TIP-Date.now());c.textContent=t?'Tip-off in '+t:'Games underway'}
 }
 let wasLive=Date.now()>=TIP;
@@ -181,6 +231,7 @@ setInterval(()=>{tickTime();const nl=Date.now()>=TIP;if(nl!==wasLive){wasLive=nl
 // ---- EVENTS ----
 document.addEventListener('click',e=>{
   const b=e.target.closest('button');if(!b)return;
+  if(b.id==='feedtog'){F.on=!F.on;try{localStorage.setItem(KEY+'-feed',F.on?'on':'off')}catch(e){}render();if(F.on)poll();return}
   if(b.dataset.f){filter=b.dataset.f;render();return}
   if(b.dataset.l){const v=st(b.dataset.l);const k=+b.dataset.k;v[k]=Math.max(0,v[k]+ +b.dataset.d);save();render();return}
   if(b.id==='reset'){
@@ -198,6 +249,7 @@ document.addEventListener('change',e=>{
   save();render();
 });
 render();
+poll();setInterval(poll,5000);
 </script>
 </body>
 </html>
