@@ -134,6 +134,34 @@ async function poll(){
   const a=document.activeElement;
   if(!a||!['INPUT','SELECT'].includes(a.tagName))render();else tickTime();
 }
+// ---- KALSHI LIVE PRICES (public market data, polled every 5s) ----
+const KAPI='https://api.elections.kalshi.com/trade-api/v2/markets';
+let K={},KS={ok:false,at:0,err:'',n:0};
+const kp=l=>K[l.id]||null;
+const livePct=l=>{const k=kp(l);return k?k.pct:l.pct};
+async function pollKalshi(){
+  try{
+    const res=await Promise.all(GAMES.map(g=>j(KAPI+'?event_ticker=KXNBAPRA-26NOV19'+g.away+g.home+'&limit=300').then(d=>d.markets||[]).catch(()=>[])));
+    const nk={};let n=0;
+    GAMES.forEach((g,gi)=>{
+      const ms=res[gi];
+      LEGS.filter(l=>l.g===g.id).forEach(l=>{
+        const m=ms.find(m=>{const sub=String(m.yes_sub_title||'');const nm=sub.split(':')[0];const t=/(\d+)\+/.exec(sub);return norm(nm)===norm(l.name)&&t&&+t[1]===l.thr});
+        if(!m)return;
+        const f=v=>parseFloat(v)||0;
+        let yes;
+        if(m.result==='yes'||m.result==='no'){yes=m.result==='yes'?1:0}
+        else{const b=f(m.yes_bid_dollars),a=f(m.yes_ask_dollars);yes=a>0?(b+a)/2:f(m.last_price_dollars)}
+        const p=Math.round((l.yes?yes:1-yes)*100);
+        nk[l.id]={pct:p,bid:f(l.yes?m.yes_bid_dollars:m.no_bid_dollars),ask:f(l.yes?m.yes_ask_dollars:m.no_ask_dollars),settled:!!m.result};
+        n++;
+      });
+    });
+    K=nk;KS={ok:n>0,at:Date.now(),err:n>0?'':'No matching Kalshi markets',n};
+  }catch(e){KS={ok:false,at:Date.now(),err:String(e&&e.message||e),n:0}}
+  const a=document.activeElement;
+  if(!a||!['INPUT','SELECT'].includes(a.tagName))render();else tickTime();
+}
 function gameState(g){
   const f=feedG(g.id);if(f)return f.state;
   const s=gs(g.id).st;
@@ -171,12 +199,13 @@ function render(){
   const infos=LEGS.map(l=>({l,i:legInfo(l)}));
   const won=infos.filter(x=>x.i.res==='won').length,lost=infos.filter(x=>x.i.res==='lost').length;
   const alive=infos.length-won-lost;
-  const prob=LEGS.reduce((a,l)=>a*(l.pct/100),1);
+  const prob=LEGS.reduce((a,l)=>a*(livePct(l)/100),1);
   const tk=lost>0?['TICKET DEAD','dead']:(won===LEGS.length?['TICKET CASHED','cashed']:['TICKET ALIVE','alive']);
   let h=`<div class="top"><div class="row"><h1>23-Leg Combo · Props</h1><div class="clock" id="now"></div></div>
   <div class="tick"><div class="big ${tk[1]}">${tk[0]}</div><div style="text-align:right;font-size:12px;color:var(--mut)">$${COST.toFixed(2)} → <b style="color:var(--tx)">$${PAYOUT.toLocaleString()}</b></div></div>
   <div class="stats"><div class="stat"><b>${LEGS.length}</b><span>Legs</span></div><div class="stat"><b style="color:var(--g)">${won}</b><span>Hit</span></div><div class="stat"><b style="color:var(--b)">${alive}</b><span>Alive</span></div><div class="stat"><b style="color:var(--r)">${lost}</b><span>Busted</span></div></div>
   <div class="meta"><span>Combined leg odds (product): <b style="color:var(--tx)">${(prob*100).toFixed(3)}%</b></span><span id="cd"></span></div>
+  <div class="meta"><span id="kfeed"></span></div>
   <div class="meta"><span id="feed"></span><button class="chip" id="feedtog" style="padding:3px 10px;font-size:11px">${F.on?'Auto-feed: ON':'Auto-feed: OFF'}</button></div></div>
   <div class="filters">${[['all','All'],['alive','Alive'],['danger','Danger'],['won','Hit'],['lost','Busted'],['yes','YES legs'],['no','NO legs']].map(f=>`<button class="chip ${filter===f[0]?'on':''}" data-f="${f[0]}">${f[1]}</button>`).join('')}</div>`;
   GAMES.forEach(g=>{
@@ -202,14 +231,14 @@ function render(){
       else{tag=[i.danger?'DANGER · '+i.need+' LEFT':'CUSHION '+i.need,i.danger?'t-danger':'t-alive'];sub=i.proj!=null?`Pace ${i.proj.toFixed(1)}`:'—'}
       const v=effStats(l.id),fed=hasFeed(l.id);
       h+=`<div class="leg ${cls}"><div class="lh"><div><div class="nm"><span class="side ${l.yes?'s-yes':'s-no'}">${l.yes?'YES':'NO'}</span>${l.name}</div><div class="ln">${l.thr}+ pts + reb + ast</div></div>
-      <div class="pct"><b>${l.pct}%</b><span>Kalshi</span></div></div>
+      <div class="pct"><b>${livePct(l)}%</b><span>${kp(l)?`Kalshi live · ${(livePct(l)-l.pct)>0?'▲':(livePct(l)-l.pct)<0?'▼':'='}${Math.abs(livePct(l)-l.pct)} vs ${l.pct}%`:`Kalshi at entry`}</span></div></div>
       <div class="bar"><i style="width:${fill}%;background:${col}"></i></div>
       <div class="st"><span><b>${i.pra}</b> / ${l.thr} PRA (${fill.toFixed(0)}%)</span><span class="tag ${tag[1]}">${tag[0]}</span><span>${sub}</span></div>
       <div class="steps">${['PTS','REB','AST'].map((n,k)=>`<div class="stp"><label>${n}</label><div class="v">${fed?'<span></span>':`<button data-l="${l.id}" data-k="${k}" data-d="-1">−</button>`}<span class="n">${v[k]}</span>${fed?'<span></span>':`<button data-l="${l.id}" data-k="${k}" data-d="1">+</button>`}</div></div>`).join('')}</div></div>`;
     });
   });
   h+=`<div class="foot"><button class="btn warn" id="reset">Reset all stats</button></div>
-  <div class="note">Scores, clock and player stats refresh automatically every 5 seconds from the live feed. If the feed is unavailable, tap + / − and set score and clock by hand.<br>Percentages: Kalshi = leg probability at entry · bar = progress to the line. NO legs bust when the player reaches the line. All 23 legs must hit.<br>Data entered here saves on this device only.</div>`;
+  <div class="note">Scores, clock and player stats refresh automatically every 5 seconds from the live feed. If the feed is unavailable, tap + / − and set score and clock by hand.<br>Percentages: live Kalshi price for your side of each leg (YES or NO), refreshed every 5s, compared with your entry % · bar = progress to the line. NO legs bust when the player reaches the line. All 23 legs must hit.<br>Data entered here saves on this device only.</div>`;
   $('app').innerHTML=h;
   tickTime();
 }
@@ -222,6 +251,11 @@ function tickTime(){
     else if(F.ok)fe.innerHTML='<span style="color:var(--g)">●</span> Live feed · updated '+Math.max(0,Math.round((Date.now()-F.at)/1000))+'s ago · every 5s';
     else if(!F.at)fe.textContent='Connecting to live feed…';
     else fe.innerHTML='<span style="color:var(--a)">●</span> Feed unavailable ('+F.err+') · manual entry';
+  }
+  const ke=$('kfeed');if(ke){
+    if(KS.ok)ke.innerHTML='<span style="color:var(--g)">●</span> Kalshi prices live · '+KS.n+'/'+LEGS.length+' legs matched · '+Math.max(0,Math.round((Date.now()-KS.at)/1000))+'s ago';
+    else if(!KS.at)ke.textContent='Connecting to Kalshi…';
+    else ke.innerHTML='<span style="color:var(--a)">●</span> Kalshi unavailable ('+KS.err+') · showing entry %';
   }
   const c=$('cd');if(c){const t=fmtTime(TIP-Date.now());c.textContent=t?'Tip-off in '+t:'Games underway'}
 }
@@ -249,7 +283,7 @@ document.addEventListener('change',e=>{
   save();render();
 });
 render();
-poll();setInterval(poll,5000);
+poll();pollKalshi();setInterval(poll,5000);setInterval(pollKalshi,5000);
 </script>
 </body>
 </html>
