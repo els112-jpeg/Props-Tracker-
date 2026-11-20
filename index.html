@@ -416,8 +416,20 @@ async function callFn(action){
   return d;
 }
 
+async function askBrain(){
+  if(AI.busy)return;AI.busy=true;AI.err='';render();
+  try{
+    const t=await token();if(!t)throw new Error('Not signed in');
+    const body={question:AI.q,stats:S,skills:brainState().filter(b=>b.learned).map(b=>({skill:b.k.name,level:b.level,notes:b.ins.lines})),picks:(typeof picks==='function'?picks():[]).slice(0,8)};
+    const r=await fetch(SB+'/functions/v1/brain-ai',{method:'POST',headers:{Authorization:'Bearer '+t,apikey:ANON,'Content-Type':'application/json'},body:JSON.stringify(body)});
+    const d=await r.json().catch(()=>({}));
+    if(!r.ok||d.error)throw new Error(d.error||('HTTP '+r.status));
+    AI.text=d.text;
+  }catch(e){AI.err=String(e.message||e)}
+  AI.busy=false;render();
+}
 // ================= HISTORY -> BETS =================
-let TAB='live';
+let TAB='live';var AI={busy:false,text:'',err:'',q:''};
 let HIST={loaded:false,ok:false,err:'',at:0},BETS=[];
 let MKT={loaded:false,ok:false,err:'',at:0,list:[]};
 let TEAMMAP=null,TEAMSTATE='';
@@ -690,6 +702,7 @@ function brainHTML(){
     const isNew=b.learned&&!SEEN[b.k.id];
     h+=`<div class="leg ${b.learned?'alive':'locked'}" data-skill="${b.k.id}"><div class="lh"><div class="av ${b.learned?'ay':'off'}">${b.k.glyph}</div><div class="who"><div class="nm">${b.k.name}${isNew?' <span class="newtag">NEW</span>':''}</div><div class="ln">${b.learned?esc(b.ins.lines[0]):'Locked · needs '+b.k.need+' '+b.k.unit+(b.k.need>1?'s':'')+' ('+b.n+' so far)'}</div></div><div class="pct"><b style="font-size:16px">${b.learned?'LV '+b.level:'🔒'}</b></div></div></div>`;
   });
+  h+=`<div class="sec" style="margin-top:14px">Ask the Brain · AI</div><div class="panel" style="padding:10px"><input id="aiq" value="${esc(AI.q)}" placeholder="Ask anything, or leave blank for a full read" style="width:100%;box-sizing:border-box;padding:10px;background:#050a1c;border:1px solid var(--cy);color:#fff;border-radius:4px;font:14px Inter,sans-serif"><button data-ai="1" class="btn" style="margin-top:8px;width:100%">${AI.busy?'Thinking…':'🧠 Get AI read'}</button>${AI.err?`<div class="note" style="color:var(--or);margin-top:8px">${esc(AI.err)}</div>`:''}${AI.text?`<div style="margin-top:10px;white-space:pre-wrap;font-size:14px;line-height:1.45">${esc(AI.text)}</div><div class="note" style="margin-top:6px">AI opinion from your stats. Not a guarantee, not financial advice.</div>`:''}</div>`;
   h+=`<div class="note" style="margin-top:10px">${DBOK?'Skills are saved to your account.':'Skills are saved on this device.'} The Brain learns from your own settled bets and today's open markets. It can't see other traders' positions.</div>`;
   return h;
 }
@@ -734,6 +747,8 @@ setInterval(tick,1000);
 if(AUTH){pollPos();pollHist();pollMkts()}
 setInterval(pollPos,5000);setInterval(pollHist,60000);setInterval(pollMkts,30000);
 setInterval(pollEspn,1000);
+document.addEventListener('input',e=>{if(e.target.id==='aiq')AI.q=e.target.value});
+document.addEventListener('click',e=>{if(e.target.closest&&e.target.closest('[data-ai]'))askBrain()});
 </script>
 </body>
 </html>
