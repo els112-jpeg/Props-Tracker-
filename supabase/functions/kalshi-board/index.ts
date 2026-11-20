@@ -31,7 +31,16 @@ Deno.serve(async(req)=>{
     if(!user)return json({error:"Not signed in"},401);
     const allowed=(Deno.env.get("ALLOWED_EMAILS")||"").split(",").map(s=>s.trim().toLowerCase()).filter(Boolean);
     if(!allowed.length||!allowed.includes((user.email||"").toLowerCase()))return json({error:"Not allowed"},403);
-    const b=await req.json().catch(()=>({}));const list=SPORTS[String(b.sport||"nba")]||SPORTS.nba;
+    const b=await req.json().catch(()=>({}));
+    if(b.action==="quotes"){
+      const tk=(Array.isArray(b.tickers)?b.tickers:[]).map(String).filter((t:string)=>/^[A-Za-z0-9._-]+$/.test(t)).slice(0,200);
+      const chunks:string[][]=[];for(let i=0;i<tk.length;i+=100)chunks.push(tk.slice(i,i+100));
+      const res=await Promise.all(chunks.map(async(c)=>{try{const r=await fetch("https://api.elections.kalshi.com/trade-api/v2/markets?limit=100&tickers="+c.join(","),{headers:{Accept:"application/json"}});if(!r.ok)return {err:r.status,m:[]};const d=await r.json();return {err:0,m:(d.markets||[]).map(slim)}}catch(_e){return {err:1,m:[]}}}));
+      const bad=res.find((x)=>x.err);
+      if(bad&&!res.some((x)=>x.m.length))return json({error:"Kalshi "+bad.err},bad.err===429?429:502);
+      return json({markets:res.flatMap((x)=>x.m),at:Date.now()});
+    }
+    const list=SPORTS[String(b.sport||"nba")]||SPORTS.nba;
     const parts=await Promise.all(list.map(series));
     return json({markets:parts.flat(),at:Date.now()});
   }catch(e){return json({error:String((e as Error).message||e)},500)}

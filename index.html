@@ -128,11 +128,12 @@ input[type=range]{-webkit-appearance:none;appearance:none;height:8px;border-radi
 input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:28px;height:28px;border-radius:50%;background:#fff;border:2px solid #fff;box-shadow:0 4px 14px rgba(79,70,229,.5)}
 input[type=range]::-moz-range-thumb{width:26px;height:26px;border-radius:50%;background:#fff;border:0;box-shadow:0 4px 14px rgba(79,70,229,.5)}
 .btn:disabled{opacity:.6}
+.qs{position:fixed;top:8px;right:10px;z-index:30;font:700 10px Inter,sans-serif;color:var(--mut);padding:3px 8px;border-radius:999px;background:rgba(255,255,255,.6);backdrop-filter:blur(10px);pointer-events:none}.qs:empty{display:none}.qs.on{color:var(--lm)}
 </style>
 </head>
 <body>
 <div class="sky"></div><div class="teams" id="teams"></div>
-<div id="app"></div>
+<div id="app"></div><div id="qs" class="qs"></div>
 <script>
 // ================= CONFIG =================
 const SB='https://wcwxqdjfoltvcxdgcyts.supabase.co';
@@ -396,7 +397,7 @@ function tick(){
 // ================= GENERIC FUNCTION CALL =================
 async function callFn(action,extra){
   const t=await token();if(!t)throw new Error('Not signed in');
-  const r=await fetch(SB+'/functions/v1/'+(action==='markets'?'kalshi-board':'kalshi-positions'),{method:'POST',headers:{Authorization:'Bearer '+t,apikey:ANON,'Content-Type':'application/json'},body:JSON.stringify(Object.assign({action},extra||{}))});
+  const r=await fetch(SB+'/functions/v1/'+(action==='markets'||action==='quotes'?'kalshi-board':'kalshi-positions'),{method:'POST',headers:{Authorization:'Bearer '+t,apikey:ANON,'Content-Type':'application/json'},body:JSON.stringify(Object.assign({action},extra||{}))});
   const d=await r.json().catch(()=>({}));
   if(r.status===401){AUTH=null;saveAuth();LAST='';render();throw new Error('Signed out')}
   if(!r.ok||d.error)throw new Error(d.error||('HTTP '+r.status));
@@ -1269,6 +1270,54 @@ function navHTML(){
   return `<nav class="nav">${T.map(t=>`<button data-tab="${t[0]}" class="${TAB===t[0]?'on':''}"><i>${t[1]}</i>${t[2]}</button>`).join('')}</nav>`+(TOASTS.length?`<div class="toasts">${TOASTS.map(t=>`<div class="toast">${esc(t)}</div>`).join('')}</div>`:'');
 }
 
+// ================= LIVE QUOTES (fast Kalshi price loop) =================
+let QD=1000,QMS=0,QOK=false,QN=0;
+function wantTickers(){
+  const s=new Set();
+  if(TAB==='live'){LEGS.forEach(l=>s.add(l.ticker))}
+  else if(TAB==='markets'){
+    mktRows().filter(r=>r.grp===MGRP&&(!MCAT||r.cat===MCAT)).slice(0,160).forEach(r=>s.add(r.m.ticker));
+  }else if(TAB==='picks'||TAB==='parlays'){
+    MKT.list.filter(m=>{const y=yesProb(m);return y>.08&&y<.92}).slice(0,120).forEach(m=>s.add(m.ticker));
+    LEGS.forEach(l=>s.add(l.ticker));
+  }
+  return [...s].slice(0,200);
+}
+function applyQuotes(list){
+  const by={};list.forEach(m=>by[m.ticker]=m);let ch=false;
+  const upd=m=>{const q=by[m.ticker];if(!q)return;for(const k of ['yes_bid_dollars','yes_ask_dollars','no_bid_dollars','no_ask_dollars','last_price_dollars','yes_bid','yes_ask','last_price','result','status','volume']){if(q[k]!==undefined&&m[k]!==q[k]){m[k]=q[k];ch=true}}};
+  LEGS.forEach(l=>upd(l.m));MKT.list.forEach(upd);Object.values(MKTX).forEach(X=>X.list.forEach(upd));
+  return ch;
+}
+async function quoteLoop(){
+  let wait=QD;
+  try{
+    if(AUTH&&!document.hidden){
+      const tk=wantTickers();
+      if(tk.length){
+        const t0=performance.now(),t=await token();
+        const r=await fetch(SB+'/functions/v1/kalshi-board',{method:'POST',headers:{Authorization:'Bearer '+t,apikey:ANON,'Content-Type':'application/json'},body:JSON.stringify({action:'quotes',tickers:tk})});
+        const d=await r.json().catch(()=>({}));
+        if(r.status===401){AUTH=null;saveAuth();LAST='';render()}
+        else if(!r.ok||d.error){QOK=false;QD=Math.min(8000,QD*2);wait=QD}
+        else{QMS=Math.round(performance.now()-t0);QOK=true;QN++;QD=TAB==='live'?500:1000;
+          if(applyQuotes(d.markets||[])){
+            if(TAB==='markets'){const a=document.activeElement;const l=document.getElementById('mlist');if(l&&!(a&&a.id==='mq'))l.innerHTML=mlistHTML()}
+            else if(TAB==='live'){render()}
+            else render();
+          }
+          wait=Math.max(0,QD-QMS);
+        }
+      }
+    }
+  }catch(e){QOK=false;QD=Math.min(8000,QD*2);wait=QD}
+  const el=document.getElementById('qs');
+  if(el){el.className='qs'+(QOK?' on':'');el.textContent=QOK?'● LIVE '+(QMS<1000?QMS+'ms':(QMS/1000).toFixed(1)+'s'):(AUTH&&!document.hidden?'● retrying':'')}
+  setTimeout(quoteLoop,Math.max(150,wait));
+}
+setTimeout(quoteLoop,1500);
+document.addEventListener('visibilitychange',()=>{if(!document.hidden)QD=1000});
+
 // ================= EVENTS =================
 document.addEventListener('click',e=>{
   const b=e.target.closest('button');if(!b)return;
@@ -1296,7 +1345,7 @@ document.addEventListener('submit',e=>{if(e.target.id==='lf'){e.preventDefault()
 render();
 setInterval(tick,1000);
 if(AUTH){pollPos();pollHist();pollMkts()}
-setInterval(pollPos,5000);setInterval(pollHist,60000);setInterval(pollMkts,30000);
+setInterval(pollPos,3000);setInterval(pollHist,60000);setInterval(pollMkts,30000);
 setInterval(pollEspn,1000);setInterval(()=>{if(TAB==='markets'&&MSPORT!=='nba')pollSport(MSPORT)},60000);
 document.addEventListener('click',e=>{const l=e.target.closest&&e.target.closest('[data-log]');if(!l)return;const i=+l.dataset.log;OPENLOG=OPENLOG===i?-1:i;render()});
 document.addEventListener('change',e=>{if(e.target.id==='tgtr'||e.target.id==='bank')render()});
