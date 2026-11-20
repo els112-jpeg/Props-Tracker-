@@ -403,7 +403,7 @@ async function askBrain(){
   if(AI.busy)return;AI.busy=true;AI.err='';render();
   try{
     const t=await token();if(!t)throw new Error('Not signed in');
-    const body={question:AI.q,stats:S,skills:nodeList().filter(b=>b.learned).map(b=>({skill:b.name,parent:b.parent,level:b.level,notes:b.ins.lines,lift_pts:b.met?Math.round(b.met.lift*100):null,legs:b.met?b.met.n:null,share_of_wins:b.met?Math.round(b.met.share*100):null})),picks:picks().filter(x=>!x.held).sort((a,b)=>b.rank-a.rank).slice(0,12).map(x=>({player:x.p.name,side:x.side,line:x.p.thr+'+',stat:KEYOF(x.p.stat),game:x.p.away+'@'+x.p.home,brain_pct:Math.round(x.chance*100),market_pct:Math.round(x.mkt*100),habit_fit:Math.round(x.fit*100),risk:x.risk?{state:x.risk.state,l5_avg:+x.risk.l5avg.toFixed(1),season_avg:+x.risk.savg.toFixed(1),l10:x.risk.l10,vs_opp:x.risk.oppN?x.risk.oppH+'/'+x.risk.oppN:null,volatility:x.risk.vol}:null})),swings:swings().slice(0,5).map(x=>({player:x.p.name,side:x.side,line:x.p.thr+'+',brain_pct:Math.round(x.chance*100),market_pct:Math.round(x.mkt*100),pays:+x.payout.toFixed(1)})),calibration:calib()};
+    const body={question:AI.q,stats:S,skills:nodeList().filter(b=>b.learned).map(b=>({skill:b.name,parent:b.parent,level:b.level,notes:b.ins.lines,lift_pts:b.met?Math.round(b.met.lift*100):null,legs:b.met?b.met.n:null,share_of_wins:b.met?Math.round(b.met.share*100):null})),picks:picks().filter(x=>!x.held).sort((a,b)=>b.rank-a.rank).slice(0,12).map(x=>({player:x.p.name,side:x.side,line:x.p.thr+'+',stat:KEYOF(x.p.stat),game:x.p.away+'@'+x.p.home,brain_pct:Math.round(x.chance*100),market_pct:Math.round(x.mkt*100),habit_fit:Math.round(x.fit*100),risk:x.risk?{state:x.risk.state,l5_avg:+x.risk.l5avg.toFixed(1),season_avg:+x.risk.savg.toFixed(1),l10:x.risk.l10,vs_opp:x.risk.oppN?x.risk.oppH+'/'+x.risk.oppN:null,volatility:x.risk.vol}:null})),swings:swings().slice(0,5).map(x=>({player:x.p.name,side:x.side,line:x.p.thr+'+',brain_pct:Math.round(x.chance*100),market_pct:Math.round(x.mkt*100),pays:+x.payout.toFixed(1)})),calibration:calib(),target_multiplier:TARGET||3,slip:(()=>{const sl=buildSlip(TARGET||3);return sl?{hit_pct:Math.round(sl.pr*100),pays:+sl.pay.toFixed(1),legs:sl.legs.map(x=>({player:x.p.name,side:x.side,line:x.p.thr+'+',stat:KEYOF(x.p.stat),brain_pct:Math.round(x.chance*100),market_pct:Math.round(x.mkt*100)}))}:null})()};
     const r=await fetch(SB+'/functions/v1/brain-ai',{method:'POST',headers:{Authorization:'Bearer '+t,apikey:ANON,'Content-Type':'application/json'},body:JSON.stringify(body)});
     const d=await r.json().catch(()=>({}));
     if(!r.ok||d.error)throw new Error(d.error||('HTTP '+r.status));
@@ -938,8 +938,38 @@ function statsHTML(){
   else h+=`<div class="sec">Most correct · teams</div><div class="panel mut">${TEAMSTATE==='failed'?'Team lookup unavailable right now':'Matching players to teams…'}</div>`;
   return h;
 }
+let TARGET=null,PICKING=false;try{TARGET=+localStorage.getItem('pt-target')||null}catch(e){}
+const payOf=x=>1/Math.max(.03,x.mkt||x.chance);
+function buildSlip(T){
+  const seen=new Set(),pool=[];
+  [...picks().filter(x=>!x.held).sort((a,b)=>b.rank-a.rank).slice(0,16),...swings().slice(0,8)].forEach(x=>{const k=x.p.m.ticker+x.side;if(!seen.has(k)&&x.mkt>.04){seen.add(k);pool.push(x)}});
+  let best=null,fallback=null;
+  const go=(start,cur,ev,pl,pr,pay)=>{
+    if(cur.length>=2){
+      if(pay>=T*.85){if(!best||pr>best.pr)best={legs:[...cur],pr,pay}}
+      if(!fallback||pay>fallback.pay)fallback={legs:[...cur],pr,pay}}
+    if(cur.length>=5)return;
+    for(let i=start;i<pool.length;i++){const x=pool[i];if(ev.has(x.p.ev)||pl.has(x.p.name))continue;
+      ev.add(x.p.ev);pl.add(x.p.name);cur.push(x);go(i+1,cur,ev,pl,pr*x.chance,pay*payOf(x));cur.pop();ev.delete(x.p.ev);pl.delete(x.p.name)}};
+  go(0,[],new Set(),new Set(),1,1);
+  const r=best||fallback;if(!r)return null;
+  return {legs:r.legs,pr:r.pr,pay:r.pay,hit:!!best};
+}
+function slipHTML(){
+  const T=TARGET||3;let h=`<div class="sec">Suggested slip</div>`;
+  if(PICKING){
+    return h+`<div class="gh"><div class="gt">What multiplier are you going for?</div><div class="wp" style="text-align:left;margin:6px 0 10px">The Brain builds the highest-chance slip that pays about this much. Higher targets mean lower hit chances.</div><div class="filters" style="margin:0;flex-wrap:wrap">${[2,3,5,10,25,50].map(v=>`<button class="chip ${TARGET===v?'on':''}" data-tgt="${v}">${v}x</button>`).join('')}</div><div class="ctrl" style="margin-top:10px;justify-content:flex-start"><input id="tgtc" type="number" inputmode="decimal" min="1.5" max="500" placeholder="Custom" style="width:110px"><button class="btn pri" data-tgt="custom">Build</button><button class="btn" data-tgt="cancel">Cancel</button></div></div>`}
+  if(!MKT.loaded||!MKT.list.length)return h+emptyCard('No slip yet','Waiting for open markets');
+  const sl=buildSlip(T);
+  if(!sl)return h+emptyCard('No slip available','Need props from at least 2 different games.');
+  h+=`<div class="gh" data-slip="1" style="cursor:pointer"><div class="gt"><span>${sl.legs.length}-leg slip · target ${T}x</span><span class="mut" style="font-size:11px;font-weight:600">${TARGET?'Tap to change':'Tap to set target'}</span></div>`;
+  sl.legs.forEach(x=>{const lab=x.p.stat.map(i=>['PTS','REB','AST'][i]).join('·');
+    h+=`<div class="lh" style="margin-top:10px"><div class="av ${x.side==='yes'?'ay':'an'}">${ini(x.p.name)}</div><div class="who"><div class="nm">${esc(x.p.name)}</div><div class="ln"><span class="side ${x.side==='yes'?'s-yes':'s-no'}">${x.side.toUpperCase()}</span>${x.p.thr}+ ${lab} · ${x.p.away}@${x.p.home}</div>${x.risk?`<div class="why" style="color:var(--mut);font-weight:500">${esc(riskLine(x.risk,x.side))}</div>`:''}</div><div class="pct"><b>${Math.round(x.chance*100)}%</b><span>${payOf(x).toFixed(1)}x</span></div></div>`});
+  h+=`<div class="wp" style="color:var(--or);margin-top:10px">Hits ~${(sl.pr*100).toFixed(0)}% of the time · pays ~${sl.pay.toFixed(1)}x${sl.hit?'':' · closest available to your target'}</div><div class="wp">Payout is a rough estimate from market prices. Kalshi's combo price will differ.</div></div>`;
+  return h;
+}
 function parlaysHTML(){
-  let h=`<div class="sec">Today's parlays</div>`;
+  let h=slipHTML()+`<div class="sec">Today's parlays</div>`;
   if(!MKT.loaded)return h+emptyCard('Scanning Kalshi…','Loading open player-prop markets');
   if(!MKT.ok&&!MKT.list.length)return h+emptyCard("Can't load markets",`<span style="color:var(--or)">${esc(MKT.err)}</span>`);
   const td=new Date().toLocaleDateString('en-CA',{timeZone:'America/Chicago'}).replace(/-/g,'');
@@ -1064,8 +1094,12 @@ setInterval(tick,1000);
 if(AUTH){pollPos();pollHist();pollMkts()}
 setInterval(pollPos,5000);setInterval(pollHist,60000);setInterval(pollMkts,30000);
 setInterval(pollEspn,1000);
+document.addEventListener('click',e=>{const t=e.target.closest&&e.target.closest('[data-slip],[data-tgt]');if(!t)return;
+  if(t.dataset.slip){PICKING=true;render();return}
+  const v=t.dataset.tgt;if(v==='cancel'){PICKING=false;render();return}
+  let n=v==='custom'?parseFloat((document.getElementById('tgtc')||{}).value):+v;if(!(n>=1.5))return;n=Math.min(500,n);TARGET=n;PICKING=false;try{localStorage.setItem('pt-target',String(n))}catch(x){}render()});
 document.addEventListener('input',e=>{if(e.target.id==='aiq')AI.q=e.target.value});
-document.addEventListener('click',e=>{var b=e.target.closest&&e.target.closest('[data-ai]');if(b){if(b.dataset.ai==='parlay')AI.q='Build me ONE parlay of 2-4 legs from the open picks for today. One leg per game. For each leg say why it fits my habits, give the combined hit chance, and tell me honestly if I should skip parlays today.';askBrain()}});
+document.addEventListener('click',e=>{var b=e.target.closest&&e.target.closest('[data-ai]');if(b){if(b.dataset.ai==='parlay')AI.q='Build me ONE parlay aiming for about '+(TARGET||3)+'x payout, using the slip in the data as a starting point (you may swap legs). One leg per game. For each leg say why it fits my habits and risk, give the combined hit chance, and tell me honestly if that target is realistic or if I should skip.';askBrain()}});
 </script>
 </body>
 </html>
