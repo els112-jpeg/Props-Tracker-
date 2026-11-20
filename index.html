@@ -776,7 +776,7 @@ function draw(cv){
     if((isMain&&p.z>-.35)||isSel||(p.z>.5&&TREE.zoom>1.15)){g.globalAlpha=Math.min(1,depth+.1);g.fillStyle='#0f172a';g.font='600 '+Math.round((isMain?10.5:9.5)*p.f)+'px Inter,sans-serif';g.fillText(n.name+(mvp&&mvp.id===n.id?' ★':''),p.x,p.y+r+12*p.f);g.globalAlpha=1}
   }
 }
-(function loop(){const cv=document.getElementById('tree')||document.getElementById('rtree');if(cv&&TAB==='brain')draw(cv);requestAnimationFrame(loop)})();
+(function loop(){requestAnimationFrame(loop);try{const cv=document.getElementById('tree')||document.getElementById('rtree');if(cv&&TAB==='brain')draw(cv)}catch(e){if(!window.__de){window.__de=1;console.error('brain draw',e)}}})();
 function treePos(e,cv){const r=cv.getBoundingClientRect();return [e.clientX-r.left,e.clientY-r.top]}
 document.addEventListener('pointerdown',e=>{const cv=(e.target.id==='tree'||e.target.id==='rtree')?e.target:null;if(!cv)return;TREE.drag=true;TREE.moved=0;TREE.t0=performance.now();TREE.lx=e.clientX;TREE.ly=e.clientY;TREE.vy=0;TREE.vp=0;TREE.idle=performance.now()});
 window.addEventListener('pointermove',e=>{if(!TREE.drag)return;const dx=e.clientX-TREE.lx,dy=e.clientY-TREE.ly;TREE.lx=e.clientX;TREE.ly=e.clientY;TREE.moved+=Math.abs(dx)+Math.abs(dy);
@@ -1412,7 +1412,11 @@ function rLinkText(){
   if(RAUTO)c=RC.busy?'council running…':RC.err?'<span style="color:var(--or)">council error</span>':RC.at?'council '+rAgo(new Date(RC.at).toISOString()):'council pending';
   return '🔬→🧠 '+sy+' · every 60s · '+c;
 }
+let RNC={k:'',v:[]};
 function researcherNodes(){
+  const k=(RB.loaded?1:0)+rSig();if(k===RNC.k)return RNC.v;const v=researcherNodesBuild();RNC={k,v};return v;
+}
+function researcherNodesBuild(){
   const D=RB.docs,rs=D.research&&D.research.body,sg=(rs&&rs.signals)||[],out=[];
   if(!RB.loaded)return out;
   const preds=(D.predictions&&D.predictions.body&&D.predictions.body.items)||[],res=(D.results&&D.results.body&&D.results.body.items)||[];
