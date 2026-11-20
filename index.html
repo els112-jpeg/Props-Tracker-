@@ -394,6 +394,7 @@ function tick(){
     else if(PS.ok)k.innerHTML='<span style="color:var(--lm)">●</span> Kalshi positions synced '+ago(PS.at)+' · every 5s';
     else k.innerHTML='<span style="color:var(--or)">●</span> Kalshi sync problem: '+PS.err;
   }
+  const rl=$('rlink');if(rl)rl.innerHTML=rLinkText();const rl2=$('rlink2');if(rl2)rl2.innerHTML=rLinkText();
   const f=$('feed');if(f){
     if(!GAMES.length)f.textContent='';
     else if(F.ok)f.innerHTML='<span style="color:var(--lm)">●</span> Game feed updated '+ago(F.at)+' · every 1s';
@@ -413,7 +414,7 @@ async function callFn(action,extra){
 }
 
 let LOG=[],OPENLOG=-1;try{LOG=JSON.parse(localStorage.getItem('pt-ailog')||'[]')}catch(e){}
-function brainBody(qq){return {question:qq,stats:S,skills:nodeList().filter(b=>b.learned).map(b=>({skill:b.name,parent:b.parent,level:b.level,notes:b.ins.lines,lift_pts:b.met?Math.round(b.met.lift*100):null,legs:b.met?b.met.n:null,share_of_wins:b.met?Math.round(b.met.share*100):null})),picks:picks().filter(x=>!x.held).sort((a,b)=>b.rank-a.rank).slice(0,12).map(x=>({player:x.p.name,side:x.side,line:x.p.thr+'+',stat:KEYOF(x.p.stat),game:x.p.away+'@'+x.p.home,brain_pct:Math.round(x.chance*100),market_pct:Math.round(x.mkt*100),habit_fit:Math.round(x.fit*100),risk:x.risk?{state:x.risk.state,l5_avg:+x.risk.l5avg.toFixed(1),season_avg:+x.risk.savg.toFixed(1),l10:x.risk.l10,vs_opp:x.risk.oppN?x.risk.oppH+'/'+x.risk.oppN:null,volatility:x.risk.vol}:null})),swings:swings().slice(0,5).map(x=>({player:x.p.name,side:x.side,line:x.p.thr+'+',brain_pct:Math.round(x.chance*100),market_pct:Math.round(x.mkt*100),pays:+x.payout.toFixed(1)})),calibration:calib(),discipline:(()=>{const pl=plan();return {tilt:PROF.tilt,bankroll:BANK,plan:{bets:pl.bets.map(b=>({player:b.x.p.name,side:b.x.side,line:b.x.p.thr+'+',stake:+b.st.toFixed(2),edge_pts:Math.round((b.x.chance-b.x.mkt)*100)})),total_risk:+pl.tot.toFixed(2),daily_cap:+pl.day.toFixed(2),passed:pl.pass,waiting:pl.wait},backtest:BT&&!BT.short?{games:BT.n,model_error:+BT.model.toFixed(3),season_rate_error:+BT.base.toFixed(3),streak_adj:ADJ.streak,opp_adj:ADJ.opp}:null,price_tracking:clvStats(),injuries_listed:Object.keys(INJ).length}})(),target_multiplier:TARGET||3,slip:(()=>{const sl=buildSlip(TARGET||3);return sl?{hit_pct:Math.round(sl.pr*100),pays:+sl.pay.toFixed(1),legs:sl.legs.map(x=>({player:x.p.name,side:x.side,line:x.p.thr+'+',stat:KEYOF(x.p.stat),brain_pct:Math.round(x.chance*100),market_pct:Math.round(x.mkt*100)}))}:null})()}}
+function brainBody(qq){return {researcher_memo:RUSE&&RC&&RC.memo?RC.memo:undefined,question:qq,stats:S,skills:nodeList().filter(b=>b.learned).map(b=>({skill:b.name,parent:b.parent,level:b.level,notes:b.ins.lines,lift_pts:b.met?Math.round(b.met.lift*100):null,legs:b.met?b.met.n:null,share_of_wins:b.met?Math.round(b.met.share*100):null})),picks:picks().filter(x=>!x.held).sort((a,b)=>b.rank-a.rank).slice(0,12).map(x=>({player:x.p.name,side:x.side,line:x.p.thr+'+',stat:KEYOF(x.p.stat),game:x.p.away+'@'+x.p.home,brain_pct:Math.round(x.chance*100),market_pct:Math.round(x.mkt*100),habit_fit:Math.round(x.fit*100),risk:x.risk?{state:x.risk.state,l5_avg:+x.risk.l5avg.toFixed(1),season_avg:+x.risk.savg.toFixed(1),l10:x.risk.l10,vs_opp:x.risk.oppN?x.risk.oppH+'/'+x.risk.oppN:null,volatility:x.risk.vol}:null})),swings:swings().slice(0,5).map(x=>({player:x.p.name,side:x.side,line:x.p.thr+'+',brain_pct:Math.round(x.chance*100),market_pct:Math.round(x.mkt*100),pays:+x.payout.toFixed(1)})),calibration:calib(),discipline:(()=>{const pl=plan();return {tilt:PROF.tilt,bankroll:BANK,plan:{bets:pl.bets.map(b=>({player:b.x.p.name,side:b.x.side,line:b.x.p.thr+'+',stake:+b.st.toFixed(2),edge_pts:Math.round((b.x.chance-b.x.mkt)*100)})),total_risk:+pl.tot.toFixed(2),daily_cap:+pl.day.toFixed(2),passed:pl.pass,waiting:pl.wait},backtest:BT&&!BT.short?{games:BT.n,model_error:+BT.model.toFixed(3),season_rate_error:+BT.base.toFixed(3),streak_adj:ADJ.streak,opp_adj:ADJ.opp}:null,price_tracking:clvStats(),injuries_listed:Object.keys(INJ).length}})(),target_multiplier:TARGET||3,slip:(()=>{const sl=buildSlip(TARGET||3);return sl?{hit_pct:Math.round(sl.pr*100),pays:+sl.pay.toFixed(1),legs:sl.legs.map(x=>({player:x.p.name,side:x.side,line:x.p.thr+'+',stat:KEYOF(x.p.stat),brain_pct:Math.round(x.chance*100),market_pct:Math.round(x.mkt*100)}))}:null})()}}
 async function askBrain(qq,kind){
   qq=qq==null?'':qq;kind=kind||(qq?'ask':'read');
   if(AI.busy)return;AI.busy=true;AI.err='';render();
@@ -725,6 +726,7 @@ function rot(p){
 }
 function nodeColor(n,mvp){
   if(!n.learned)return '#94a3b8';
+  if(n.col)return n.col;
   if(n.met&&n.met.n>=3){if(n.met.lift>=.05)return '#16a34a';if(n.met.lift<=-.05)return '#e11d48'}
   return n.scan?'#0ea5e9':'#2563eb';
 }
@@ -732,7 +734,7 @@ function draw(cv){
   const dpr=Math.min(2,window.devicePixelRatio||1),w=cv.clientWidth,h=cv.clientHeight;
   if(cv.width!==Math.round(w*dpr)||cv.height!==Math.round(h*dpr)){cv.width=Math.round(w*dpr);cv.height=Math.round(h*dpr)}
   const g=cv.getContext('2d');g.setTransform(dpr,0,0,dpr,0,0);g.clearRect(0,0,w,h);
-  const nodes=nodeList();if(!nodes.length)return;layout(nodes);
+  const nodes=cv.id==='rtree'?researcherNodes():nodeList();if(!nodes.length)return;layout(nodes);
   const now=performance.now();
   if(!TREE.drag){TREE.yaw+=TREE.vy;TREE.pitch=Math.max(-1.2,Math.min(1.2,TREE.pitch+TREE.vp));TREE.vy*=.94;TREE.vp*=.94;
     if(now-TREE.idle>2500)TREE.yaw+=.0028}
@@ -774,17 +776,17 @@ function draw(cv){
     if((isMain&&p.z>-.35)||isSel||(p.z>.5&&TREE.zoom>1.15)){g.globalAlpha=Math.min(1,depth+.1);g.fillStyle='#0f172a';g.font='600 '+Math.round((isMain?10.5:9.5)*p.f)+'px Inter,sans-serif';g.fillText(n.name+(mvp&&mvp.id===n.id?' ★':''),p.x,p.y+r+12*p.f);g.globalAlpha=1}
   }
 }
-(function loop(){const cv=document.getElementById('tree');if(cv&&TAB==='brain')draw(cv);requestAnimationFrame(loop)})();
+(function loop(){const cv=document.getElementById('tree')||document.getElementById('rtree');if(cv&&TAB==='brain')draw(cv);requestAnimationFrame(loop)})();
 function treePos(e,cv){const r=cv.getBoundingClientRect();return [e.clientX-r.left,e.clientY-r.top]}
-document.addEventListener('pointerdown',e=>{const cv=e.target.id==='tree'?e.target:null;if(!cv)return;TREE.drag=true;TREE.moved=0;TREE.t0=performance.now();TREE.lx=e.clientX;TREE.ly=e.clientY;TREE.vy=0;TREE.vp=0;TREE.idle=performance.now()});
+document.addEventListener('pointerdown',e=>{const cv=(e.target.id==='tree'||e.target.id==='rtree')?e.target:null;if(!cv)return;TREE.drag=true;TREE.moved=0;TREE.t0=performance.now();TREE.lx=e.clientX;TREE.ly=e.clientY;TREE.vy=0;TREE.vp=0;TREE.idle=performance.now()});
 window.addEventListener('pointermove',e=>{if(!TREE.drag)return;const dx=e.clientX-TREE.lx,dy=e.clientY-TREE.ly;TREE.lx=e.clientX;TREE.ly=e.clientY;TREE.moved+=Math.abs(dx)+Math.abs(dy);
   TREE.yaw+=dx*.009;TREE.pitch=Math.max(-1.2,Math.min(1.2,TREE.pitch+dy*.009));TREE.vy=dx*.0035;TREE.vp=dy*.0035;TREE.idle=performance.now()});
 window.addEventListener('pointerup',e=>{if(!TREE.drag)return;TREE.drag=false;TREE.idle=performance.now();
-  const cv=document.getElementById('tree');if(!cv||TREE.moved>8||performance.now()-TREE.t0>500)return;
+  const cv=document.getElementById('tree')||document.getElementById('rtree');if(!cv||TREE.moved>8||performance.now()-TREE.t0>500)return;
   const [x,y]=treePos(e,cv);let best=null;
   for(const p of TREE.proj){if(Math.hypot(p.x-x,p.y-y)<=p.r+8&&(!best||p.z>best.z))best=p}
   if(best){SHEET=best.id;SEEN[best.id]=1;try{localStorage.setItem('pt-seen',JSON.stringify(SEEN))}catch(x){}render()}});
-document.addEventListener('wheel',e=>{if(e.target.id!=='tree')return;e.preventDefault();TREE.zoom=Math.max(.7,Math.min(2.2,TREE.zoom*(e.deltaY<0?1.08:.93)))},{passive:false});
+document.addEventListener('wheel',e=>{if(e.target.id!=='tree'&&e.target.id!=='rtree')return;e.preventDefault();TREE.zoom=Math.max(.7,Math.min(2.2,TREE.zoom*(e.deltaY<0?1.08:.93)))},{passive:false});
 async function doScan(){
   if(SCANNING)return;SCANNING=true;FX=performance.now();render();
   try{await pollMkts()}catch(e){}
@@ -1284,7 +1286,7 @@ function parlaysHTML(){
     const prod=legs.reduce((a,x)=>a*x.chance,1);const fit=legs.reduce((a,x)=>a+x.fit,0)/legs.length;
     h+=`<div class="gh" style="margin-bottom:12px"><div class="gt">${st[0]} · ${legs.length} legs</div><div class="wp" style="margin:2px 0 8px">${st[1]}</div>`;
     legs.forEach(x=>{const lab=x.p.stat.map(i=>['PTS','REB','AST'][i]).join('·');
-      h+=`<div class="lh" style="margin-bottom:8px"><div class="av ${x.side==='yes'?'ay':'an'}">${avImg(x.p.name)}</div><div class="who"><div class="nm">${esc(x.p.name)}</div><div class="ln"><span class="side ${x.side==='yes'?'s-yes':'s-no'}">${x.side.toUpperCase()}</span>${x.p.thr}+ ${lab} · ${x.p.away}@${x.p.home}</div>${x.why.length?`<div class="why">${x.why.map(esc).join(' · ')}</div>`:''}${x.risk?`<div class="why" style="color:var(--mut);font-weight:500">${esc(riskLine(x.risk,x.side))}</div>`:''}</div><div class="pct"><b>${Math.round(x.chance*100)}%</b><span>Leg</span></div></div>`});
+      h+=`<div class="lh" style="margin-bottom:8px"><div class="av ${x.side==='yes'?'ay':'an'}">${avImg(x.p.name)}</div><div class="who"><div class="nm">${esc(x.p.name)}</div><div class="ln"><span class="side ${x.side==='yes'?'s-yes':'s-no'}">${x.side.toUpperCase()}</span>${x.p.thr}+ ${lab} · ${x.p.away}@${x.p.home}</div>${x.why.length?`<div class="why">${x.why.map(esc).join(' · ')}</div>`:''}${rIntelLine(x.p.name)}${x.risk?`<div class="why" style="color:var(--mut);font-weight:500">${esc(riskLine(x.risk,x.side))}</div>`:''}</div><div class="pct"><b>${Math.round(x.chance*100)}%</b><span>Leg</span></div></div>`});
     h+=`<div class="wp" style="color:var(--or)">All ${legs.length} must hit: ~${(prod*100).toFixed(0)}% · habit fit ${Math.round(fit*100)} · fair payout ~${(1/prod).toFixed(1)}x</div></div>`;
   });
   if(!sets.some(st=>st[2].length>=2))h+=emptyCard('Not enough games open','Need props from at least 2 different games. Check back closer to tip-off.');
@@ -1353,10 +1355,104 @@ let BV='main';try{BV=localStorage.getItem('pt-bv')==='researcher'?'researcher':'
 let RUSE=true;try{RUSE=localStorage.getItem('pt-ruse')!=='0'}catch(e){}
 let RB={loaded:false,busy:false,err:'',imp:'',docs:{}},RAI={busy:false,err:'',q:'',res:null},RSIGF='nba',ROPEN={},RLOG=[];
 try{RLOG=JSON.parse(localStorage.getItem('pt-rlog')||'[]')}catch(e){}
-async function loadResearcher(){
-  if(RB.busy)return;RB.busy=true;
-  try{const rows=await dbCall('GET','researcher_brain?select=doc,body,updated_at');RB.docs={};(rows||[]).forEach(r=>RB.docs[r.doc]=r);RB.err=''}catch(e){RB.err=String(e.message||e)}
-  RB.loaded=true;RB.busy=false;LAST='';render();
+let RAUTO=true;try{RAUTO=localStorage.getItem('pt-rauto')!=='0'}catch(e){}
+let RC={at:0,memo:'',text:'',sig:'',busy:false,err:''},RSYNC={at:0,n:0,ok:null,sig:''},RINTEL={};
+try{const x=JSON.parse(localStorage.getItem('pt-rc')||'null');if(x&&typeof x==='object')RC=Object.assign(RC,x,{busy:false,err:''})}catch(e){}
+function rSig(){return Object.keys(RB.docs).sort().map(k=>k+':'+RB.docs[k].updated_at).join('|')}
+function rBuildIntel(){
+  const sg=(RB.docs.research&&RB.docs.research.body&&RB.docs.research.body.signals)||[],m={};
+  sg.forEach(x=>{const k=String(x.player||'').toLowerCase().trim();if(k)(m[k]=m[k]||[]).push(x)});RINTEL=m;
+}
+function rIntelLine(name){
+  const a=RINTEL[String(name||'').toLowerCase().trim()];if(!a||!a.length)return '';
+  const x=[...a].sort((p,q)=>(q.confidence||0)-(p.confidence||0))[0],c=RSTAT[x.status_class]||'var(--mut)';
+  return `<div class="why" style="font-weight:600">🔬 <span style="color:${c}">${esc(x.status_class||'note')}</span> · ${esc(String(x.signal_type||'').replace(/_/g,' '))} · ${esc(String(x.summary||'').slice(0,110))}${(x.summary||'').length>110?'…':''}</div>`;
+}
+async function loadResearcher(quiet){
+  if(RB.busy)return false;RB.busy=true;let changed=false;
+  const before=rSig();
+  try{const rows=await dbCall('GET','researcher_brain?select=doc,body,updated_at');RB.docs={};(rows||[]).forEach(r=>RB.docs[r.doc]=r);RB.err='';RSYNC.ok=true}catch(e){RB.err=String(e.message||e);RSYNC.ok=false}
+  RSYNC.at=Date.now();RSYNC.n++;rBuildIntel();changed=before!==rSig();
+  RB.loaded=true;RB.busy=false;
+  if(!quiet||changed){LAST='';softRender()}
+  return changed;
+}
+async function researcherSync(){
+  if(!AUTH||!token)return;
+  try{
+    await loadResearcher(true);
+    if(RAUTO&&RSYNC.ok&&!RC.busy&&!RAI.busy&&HIST.loaded&&S){
+      const sig=rSig(),stale=Date.now()-RC.at>600000,hasData=!!RB.docs.research;
+      if(hasData&&(sig!==RC.sig||stale))await autoCouncil(sig);
+    }
+  }catch(e){}
+  tick();
+}
+async function autoCouncil(sig){
+  RC.busy=true;RC.err='';tick();
+  try{
+    const t=await token();if(!t)throw new Error('Not signed in');
+    let body;try{body=brainBody('')}catch(e){body={}}
+    body.question='';body.mode='council';body.researcher_memo=undefined;
+    const r=await fetch(SB+'/functions/v1/brain-ai',{method:'POST',headers:{Authorization:'Bearer '+t,apikey:ANON,'Content-Type':'application/json'},body:JSON.stringify(body)});
+    const d=await r.json().catch(()=>({}));
+    if(!r.ok||d.error)throw new Error(d.error||('HTTP '+r.status));
+    RC.memo=d.researcher||'';RC.text=d.text||'';RC.at=Date.now();RC.sig=sig;
+    try{localStorage.setItem('pt-rc',JSON.stringify({at:RC.at,memo:RC.memo,text:RC.text,sig:RC.sig}))}catch(e){}
+    RLOG.unshift({at:Date.now(),mode:'council',q:'(auto council)',text:RC.text,researcher:RC.memo});RLOG=RLOG.slice(0,20);
+    try{localStorage.setItem('pt-rlog',JSON.stringify(RLOG))}catch(e){}
+  }catch(e){RC.err=String(e.message||e);RC.at=Date.now()-540000;RC.sig=sig}
+  RC.busy=false;LAST='';softRender();
+}
+function rLinkText(){
+  if(!RB.loaded)return 'Researcher link: connecting…';
+  const a=Math.max(0,Math.round((Date.now()-RSYNC.at)/1000));
+  const sy=RSYNC.ok===false?'<span style="color:var(--or)">●</span> sync problem':'<span style="color:var(--lm)">●</span> synced '+a+'s ago';
+  let c='council off';
+  if(RAUTO)c=RC.busy?'council running…':RC.err?'<span style="color:var(--or)">council error</span>':RC.at?'council '+rAgo(new Date(RC.at).toISOString()):'council pending';
+  return '🔬→🧠 '+sy+' · every 60s · '+c;
+}
+function researcherNodes(){
+  const D=RB.docs,rs=D.research&&D.research.body,sg=(rs&&rs.signals)||[],out=[];
+  if(!RB.loaded)return out;
+  const preds=(D.predictions&&D.predictions.body&&D.predictions.body.items)||[],res=(D.results&&D.results.body&&D.results.body.items)||[];
+  const has=(x,re)=>re.test(String(x.signal_type||'')+' '+String(x.summary||'').slice(0,80));
+  const add=(id,name,glyph,parent,n,need,unit,lines,effect,desc,col)=>{
+    const level=lvl(n,need),learned=level>=1;
+    out.push({id:'r_'+id,name,glyph,parent:parent?'r_'+parent:null,level,learned,n,need,unit,next:level>=3?null:need*(level===0?1:level===1?2:4),k:{id,name},ins:{lines,effect},met:null,desc:desc||'',col:col||null});
+  };
+  const sample=(a)=>a.slice(0,3).map(x=>(x.player||x.team||'?')+': '+String(x.summary||'').slice(0,70));
+  add('intake','Signal Intake','SI',null,sg.length,5,'signal',[sg.length+' signals filed',rs&&rs.run_date?'Latest run '+rs.run_date:'No run yet'],'Everything the Researcher reads becomes a signal the Brain can weigh.','Daily coverage turned into structured signals');
+  const lg={};sg.forEach(x=>{const k=x.league||'Other';lg[k]=(lg[k]||0)+1});
+  Object.entries(lg).sort((a,b)=>b[1]-a[1]).slice(0,4).forEach(([k,n])=>add('intake.'+k,k+' Desk',k.slice(0,3).toUpperCase(),'intake',n,3,'signal',[n+' '+k+' signals'],'Depth in '+k+' coverage.','Signals tagged '+k));
+  const inj=sg.filter(x=>has(x,/injur|status|out|questionable|doubtful|probable|return|rest/i));
+  add('injury','Injury Desk','IN',null,inj.length,3,'signal',sample(inj).concat(inj.length?[]:['No injury signals yet']),'Flags players likely to miss time so you avoid dead props.','Availability and injury news');
+  const conf=inj.filter(x=>x.status_class==='confirmed').length;
+  add('injury.confirmed','Confirmed Outs','CO','injury',conf,2,'signal',[conf+' confirmed by official sources'],'High confidence availability calls.','Official or multi-source confirmed',  '#16a34a');
+  const lin=sg.filter(x=>has(x,/lineup|role|minutes|rotation|start|bench|usage/i));
+  add('lineup','Lineup & Role','LR',null,lin.length,3,'signal',sample(lin).concat(lin.length?[]:['No lineup signals yet']),'Role and minutes changes shift stat lines, which shifts props.','Starters, minutes, usage');
+  const src=sg.filter(x=>/^https?:/.test(x.source_url||'')).length;
+  add('verify','Source Check','SC',null,src,5,'sourced signal',[src+' of '+sg.length+' signals link a source','Avg reliability '+(sg.length?Math.round(sg.reduce((a,x)=>a+(x.source_reliability||0),0)/sg.length*100):0)+'%'],'Weights each note by where it came from.','Source quality and status labels');
+  [['confirmed','Confirmed','#16a34a'],['reported','Reported','#0ea5e9'],['conflicting','Conflicting','#f59e0b'],['rumor','Rumors','#e11d48']].forEach(([k,nm,c])=>{
+    const n=sg.filter(x=>x.status_class===k).length;add('verify.'+k,nm,nm[0],'verify',n,2,'signal',[n+' '+nm.toLowerCase()+' signals'],k==='conflicting'?'Sources disagree. The Brain caps trust here.':k==='rumor'?'Unverified. Treated as noise unless it repeats.':'Counts toward the confidence the Brain applies.','',c)});
+  add('calls','Call Maker','CM',null,preds.length,3,'call',[preds.length+' calls filed',(preds.length-res.length)+' still open'],'Turns signals into dated predictions it can be graded on.','Predictions with confidence');
+  const hi=preds.filter(p=>(p.confidence||0)>=.7).length,lo=preds.length-hi;
+  add('calls.high','High Confidence','H','calls',hi,2,'call',[hi+' calls at 70%+'],'Its strongest reads. Watch how these grade.','');
+  add('calls.low','Lean Calls','L','calls',lo,2,'call',[lo+' calls under 70%'],'Lower conviction leans.','');
+  const hit=res.filter(r=>r.correct).length;
+  add('record','Track Record','TR',null,res.length,5,'graded call',[res.length?hit+'/'+res.length+' graded calls right ('+pc(hit/res.length)+')':'Nothing graded yet'],'The more calls it grades, the more the Brain can trust it.','Self-graded accuracy');
+  add('record.hit','Hits','✓','record',hit,2,'graded call',[hit+' correct'],'','','#16a34a');
+  add('record.miss','Misses','✗','record',res.length-hit,2,'graded call',[(res.length-hit)+' wrong'],'Misses teach it what to distrust.','','#e11d48');
+  return out;
+}
+function rTreePanel(){
+  const nodes=researcherNodes(),ln=nodes.filter(n=>n.learned),lv=1+Math.floor(ln.reduce((a,n)=>a+n.level,0)/4);
+  return `<div class="panel treewrap"><div class="tbar"><div><b style="font-size:15px">Researcher Level ${lv}</b> <span class="mut" style="font-size:12px">· ${ln.length}/${nodes.length} skills</span></div><div style="display:flex;gap:6px"><button class="btn" data-zoom="1" style="padding:9px 13px">+</button><button class="btn" data-zoom="-1" style="padding:9px 13px">−</button><button class="btn" data-treereset="1">Reset</button></div></div><canvas id="rtree"></canvas><div class="legend"><span><i style="background:#16a34a"></i>Confirmed / right</span><span><i style="background:#f59e0b"></i>Conflicting</span><span><i style="background:#2563eb"></i>Learning</span><span><i style="background:#94a3b8"></i>Locked</span></div></div><div class="note" style="margin-top:6px">Drag to spin · scroll or +/− to zoom · tap any node</div>`;
+}
+function rCouncilPanel(){
+  if(!RC.at||!RC.text)return RAUTO?`<div class="sec">Council · Researcher + Brain</div><div class="panel"><div class="note" style="text-align:left;margin:0">${RC.busy?'First council running…':'The first council runs once the Researcher has filed notes.'}</div></div>`:'';
+  const tl=rTldr(RC.text),op=ROPEN.rc;
+  return `<div class="sec">Council · Researcher + Brain</div><div class="panel" data-rtoggle="rc" style="cursor:pointer"><div class="row"><b>🤝 Latest council</b><span class="mut" style="font-size:12px">${rAgo(new Date(RC.at).toISOString())}</span></div>${tl?`<div style="font-weight:700;margin-top:6px">${esc(tl)}</div>`:''}${op?`<div style="white-space:pre-wrap;font-size:13px;line-height:1.5;margin-top:6px">${esc(rText(RC.text))}</div>${RC.memo?`<div class="sec" style="margin:10px 0 4px">🔬 Researcher memo</div><div style="white-space:pre-wrap;font-size:13px;line-height:1.5">${esc(RC.memo)}</div>`:''}`:''}<div class="mut" style="font-size:11px;margin-top:6px">${op?'Tap to collapse':'Tap to read all'}</div></div>`;
 }
 async function importResearcher(files){
   const rows=[],now=new Date().toISOString(),bad=[];
@@ -1419,7 +1515,7 @@ function researcherHTML(){
   h+=`<div class="note" style="text-align:left;margin-top:6px">${graded>=20?'Track record: '+graded+' graded calls.':'Track record is unproven ('+graded+' graded calls so far). The Brain treats its notes as outside intel, not fact.'}</div>`;
   if(rs&&rs.run_date&&rs.run_date<today)h+=`<div class="note" style="text-align:left;color:var(--or)">⚠ Latest notes are from ${esc(rs.run_date)}. Today's run has not been filed yet.</div>`;
   if(RB.err)h+=`<div class="note" style="text-align:left;color:var(--rd)">${esc(RB.err)}</div>`;
-  h+=`<div style="display:flex;gap:8px;margin-top:10px"><button class="btn" data-rreload="1" style="flex:1">↻ Refresh</button></div></div>`;
+  h+=`<div id="rlink" class="note" style="text-align:left;margin-top:8px">${rLinkText()}</div><div style="display:flex;gap:8px;margin-top:10px"><button class="btn" data-rreload="1" style="flex:1">↻ Refresh</button><button class="chip ${RAUTO?'on':''}" data-rauto="1">🤝 Auto-council ${RAUTO?'ON':'OFF'}</button></div></div>`+rTreePanel()+rCouncilPanel();
   // talk to the researcher / council
   h+=`<div class="sec">Talk to the Researcher</div><div class="panel"><input id="raiq" class="fld" style="margin-top:0" value="${esc(RAI.q)}" placeholder="Ask anything, or leave blank for today's read"><div style="display:flex;gap:8px;margin-top:10px"><button data-rask="researcher" class="btn" style="flex:1" ${RAI.busy?'disabled':''}>${RAI.busy?'Thinking…':'🔬 Ask Researcher'}</button><button data-rcouncil="1" class="btn pri" style="flex:1" ${RAI.busy?'disabled':''}>🤝 Council</button></div><div class="note" style="text-align:left;margin-top:8px">Council: the Researcher sends the Brain a memo (boost, avoid, watch). The Brain answers it against your plan and stake caps, and says where they disagree.</div></div>`;
   if(RAI.err)h+=`<div class="note" style="color:var(--rd);margin-top:8px">${esc(RAI.err)}</div>`;
@@ -1473,13 +1569,15 @@ function mainBrainHTML(){
   h+=`<div class="sec">Market scans</div><div class="panel"><div class="row"><b>${SCAN.n} scan${SCAN.n===1?'':'s'} done</b><span class="mut" style="font-size:12px">${SCAN.at?'last '+new Date(SCAN.at).toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit',timeZone:'America/Chicago'}):'never'}</span></div><div class="note" style="text-align:left;margin-top:8px">Scanning reads every open Kalshi player prop and grows the Market Reader branch: price bands, stat mix, habit matches and edge spots. More scans unlock more sub-skills.</div>${MKT.list.length?'':`<div class="note" style="color:var(--or)">No markets loaded yet.</div>`}</div>`;
   {const c=calib();h+=`<div class="sec">Self-check · is the Brain right?</div><div class="panel">`+(c.n?`<div class="stats" style="grid-template-columns:repeat(3,minmax(0,1fr));margin-top:0"><div class="stat"><b>${c.n}</b><span>Graded calls</span></div><div class="stat"><b>${pc(c.hr)}</b><span>Actually hit</span></div><div class="stat"><b>${pc(c.ap)}</b><span>Predicted</span></div></div>${c.bk.map(b=>`<div class="barrow"><span class="mut" style="width:62px;font-size:12px">${b.lab}</span><div class="bar sm"><i style="width:${b.hit*100}%"></i></div><b>${pc(b.hit)} <small class="mut">(${b.n})</small></b></div>`).join('')}<div class="note" style="text-align:left">Error score: Brain ${c.bB.toFixed(3)} vs market ${c.bM.toFixed(3)} (lower is better). ${c.bB<c.bM?'The Brain is beating the market so far.':'The market is still at least as accurate. Trust it more until the Brain beats it.'}</div>`:`<div class="note" style="text-align:left;margin:0">The Brain logs its hit chances on today's props and grades itself after the games finish. ${c.open||0} calls waiting. Needs real results before it can claim any edge.</div>`)+`</div>`}
   h+=disciplineHTML();
+  if(RB.loaded||RAUTO)h+=`<div class="sec">Researcher link</div><div class="panel"><div id="rlink2" class="note" style="text-align:left;margin:0">${rLinkText()}</div></div>`+rCouncilPanel();
   h+=`<div class="sec">Ask the Brain · AI</div><div class="panel"><input id="aiq" class="fld" style="margin-top:0" value="${esc(AI.q)}" placeholder="Ask anything, or leave blank for a full read"><button data-ai="1" class="btn" style="margin-top:10px;width:100%" ${AI.busy?'disabled':''}>${AI.busy?'Thinking…':'🧠 Get AI read'}</button><div style="display:flex;gap:8px;margin-top:8px;align-items:center;flex-wrap:wrap"><button class="chip ${RUSE?'on':''}" data-ruse="1">🔬 Use Researcher intel</button><button class="chip" data-rcouncil="1">🤝 Council with Researcher</button></div><div style="height:1px;background:rgba(100,116,139,.2);margin:16px 0"></div>${sliderHTML()}<div class="note" style="margin-top:8px">Set a target multiplier and the Brain hunts the open props for the best parlay near it.</div></div>${aiResultHTML()}`+logHTML();
   h+=`<div class="note" style="margin-top:12px">${DBOK?'Skills are saved to your account.':'Skills are saved on this device.'} The Brain learns from your own settled bets and the open markets. It can't see other traders' positions.</div>`;
   return h;
 }
 function sheetHTML(){
-  if(!SHEET||!AN)return '';
-  const nodes=nodeList(),b=nodes.find(x=>x.id===SHEET);if(!b)return '';
+  const isR=typeof SHEET==='string'&&SHEET.startsWith('r_');
+  if(!SHEET||(!AN&&!isR))return '';
+  const nodes=isR?researcherNodes():nodeList(),b=nodes.find(x=>x.id===SHEET);if(!b)return '';
   const row=DBS[b.id]||LOCALDB[b.id];
   const par=b.parent?nodes.find(x=>x.id===b.parent):null;
   let h=`<div class="sheetbg" data-close="1"><div class="sheet"><div class="row"><div class="gt">${esc(b.name)}</div><button class="chip" data-close="1">Close</button></div>`;
@@ -1613,6 +1711,7 @@ document.addEventListener('click',e=>{
   if(b.dataset.rask){askResearcher(b.dataset.rask);return}
   if(b.dataset.rcouncil){if(BV!=='researcher'){BV='researcher';try{localStorage.setItem('pt-bv',BV)}catch(x){}}askResearcher('council');window.scrollTo(0,0);return}
   if(b.dataset.rsigf){RSIGF=b.dataset.rsigf;LAST='';render();return}
+  if(b.dataset.rauto){RAUTO=!RAUTO;try{localStorage.setItem('pt-rauto',RAUTO?'1':'0')}catch(x){}if(RAUTO)researcherSync();LAST='';render();return}
   if(b.dataset.rreload){RB.busy=false;loadResearcher();return}
   if(b.dataset.tab){TAB=b.dataset.tab;SHEET=null;LAST='';render();window.scrollTo(0,0);return}
 });
@@ -1624,6 +1723,7 @@ document.addEventListener('click',e=>{
 document.addEventListener('submit',e=>{if(e.target.id==='lf'){e.preventDefault();doLogin('in')}});
 render();
 setInterval(tick,1000);
+setInterval(researcherSync,60000);setTimeout(researcherSync,4000);
 if(AUTH){pollPos();pollHist();pollMkts()}
 setInterval(pollPos,3000);setInterval(pollHist,60000);setInterval(pollMkts,30000);
 setInterval(pollEspn,1000);setInterval(()=>{if(TAB==='markets'&&MSPORT!=='nba')pollSport(MSPORT)},60000);

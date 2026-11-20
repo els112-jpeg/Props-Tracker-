@@ -74,7 +74,7 @@ Deno.serve(async(req)=>{
     }
 
     const intel=compactResearcher(RD,false);
-    const text=await call(MAIN_SYSTEM+(intel?RESEARCHER_NOTE:""),"DATA:\n"+mainCtx(intel?{researcher_intel:intel}:{})+"\n\n"+mainAsk);
+    const text=await call(MAIN_SYSTEM+(intel?RESEARCHER_NOTE:""),"DATA:\n"+mainCtx({...(intel?{researcher_intel:intel}:{}),...(typeof b.researcher_memo==="string"&&b.researcher_memo&&b.use_researcher!==false?{researcher_latest_council:String(b.researcher_memo).slice(0,1800)}:{})})+"\n\n"+mainAsk);
     return json({text,used_researcher:!!intel});
   }catch(e){
     const m=String((e as Error).message||e);
