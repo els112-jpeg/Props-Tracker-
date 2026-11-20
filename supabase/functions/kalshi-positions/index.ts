@@ -61,8 +61,9 @@ Deno.serve(async (req: Request) => {
       .split(",").map((s) => s.trim().toLowerCase()).filter(Boolean);
     if (!allowed.length) return json({ error: "Server setup incomplete: ALLOWED_EMAILS secret is not set" }, 503);
     if (!allowed.includes(data.user.email.toLowerCase())) return json({ error: "This account is not allowed" }, 403);
-    if (!Deno.env.get("KALSHI_KEY_ID") || !Deno.env.get("KALSHI_PRIVATE_KEY")) {
-      return json({ error: "Server setup incomplete: Kalshi secrets are not set" }, 503);
+    const missing = ["KALSHI_KEY_ID", "KALSHI_PRIVATE_KEY"].filter((k) => !(Deno.env.get(k) || "").trim());
+    if (missing.length) {
+      return json({ error: "Server setup incomplete: missing secret " + missing.join(" and ") }, 503);
     }
 
     // 2. Open positions (all pages).
