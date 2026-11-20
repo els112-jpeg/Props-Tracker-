@@ -403,20 +403,28 @@ async function callFn(action){
   return d;
 }
 
-async function askBrain(){
+let LOG=[],OPENLOG=-1;try{LOG=JSON.parse(localStorage.getItem('pt-ailog')||'[]')}catch(e){}
+async function askBrain(qq,kind){
+  qq=qq==null?'':qq;kind=kind||(qq?'ask':'read');
   if(AI.busy)return;AI.busy=true;AI.err='';render();
   try{
     const t=await token();if(!t)throw new Error('Not signed in');
-    const body={question:AI.q,stats:S,skills:nodeList().filter(b=>b.learned).map(b=>({skill:b.name,parent:b.parent,level:b.level,notes:b.ins.lines,lift_pts:b.met?Math.round(b.met.lift*100):null,legs:b.met?b.met.n:null,share_of_wins:b.met?Math.round(b.met.share*100):null})),picks:picks().filter(x=>!x.held).sort((a,b)=>b.rank-a.rank).slice(0,12).map(x=>({player:x.p.name,side:x.side,line:x.p.thr+'+',stat:KEYOF(x.p.stat),game:x.p.away+'@'+x.p.home,brain_pct:Math.round(x.chance*100),market_pct:Math.round(x.mkt*100),habit_fit:Math.round(x.fit*100),risk:x.risk?{state:x.risk.state,l5_avg:+x.risk.l5avg.toFixed(1),season_avg:+x.risk.savg.toFixed(1),l10:x.risk.l10,vs_opp:x.risk.oppN?x.risk.oppH+'/'+x.risk.oppN:null,volatility:x.risk.vol}:null})),swings:swings().slice(0,5).map(x=>({player:x.p.name,side:x.side,line:x.p.thr+'+',brain_pct:Math.round(x.chance*100),market_pct:Math.round(x.mkt*100),pays:+x.payout.toFixed(1)})),calibration:calib(),target_multiplier:TARGET||3,slip:(()=>{const sl=buildSlip(TARGET||3);return sl?{hit_pct:Math.round(sl.pr*100),pays:+sl.pay.toFixed(1),legs:sl.legs.map(x=>({player:x.p.name,side:x.side,line:x.p.thr+'+',stat:KEYOF(x.p.stat),brain_pct:Math.round(x.chance*100),market_pct:Math.round(x.mkt*100)}))}:null})()};
+    const body={question:qq,stats:S,skills:nodeList().filter(b=>b.learned).map(b=>({skill:b.name,parent:b.parent,level:b.level,notes:b.ins.lines,lift_pts:b.met?Math.round(b.met.lift*100):null,legs:b.met?b.met.n:null,share_of_wins:b.met?Math.round(b.met.share*100):null})),picks:picks().filter(x=>!x.held).sort((a,b)=>b.rank-a.rank).slice(0,12).map(x=>({player:x.p.name,side:x.side,line:x.p.thr+'+',stat:KEYOF(x.p.stat),game:x.p.away+'@'+x.p.home,brain_pct:Math.round(x.chance*100),market_pct:Math.round(x.mkt*100),habit_fit:Math.round(x.fit*100),risk:x.risk?{state:x.risk.state,l5_avg:+x.risk.l5avg.toFixed(1),season_avg:+x.risk.savg.toFixed(1),l10:x.risk.l10,vs_opp:x.risk.oppN?x.risk.oppH+'/'+x.risk.oppN:null,volatility:x.risk.vol}:null})),swings:swings().slice(0,5).map(x=>({player:x.p.name,side:x.side,line:x.p.thr+'+',brain_pct:Math.round(x.chance*100),market_pct:Math.round(x.mkt*100),pays:+x.payout.toFixed(1)})),calibration:calib(),target_multiplier:TARGET||3,slip:(()=>{const sl=buildSlip(TARGET||3);return sl?{hit_pct:Math.round(sl.pr*100),pays:+sl.pay.toFixed(1),legs:sl.legs.map(x=>({player:x.p.name,side:x.side,line:x.p.thr+'+',stat:KEYOF(x.p.stat),brain_pct:Math.round(x.chance*100),market_pct:Math.round(x.mkt*100)}))}:null})()};
     const r=await fetch(SB+'/functions/v1/brain-ai',{method:'POST',headers:{Authorization:'Bearer '+t,apikey:ANON,'Content-Type':'application/json'},body:JSON.stringify(body)});
     const d=await r.json().catch(()=>({}));
     if(!r.ok||d.error)throw new Error(d.error||('HTTP '+r.status));
     AI.text=d.text;
+    const sl=(kind==='parlay')?buildSlip(TARGET||3):null;
+    const m=/^\s*TL;?DR:?\s*(.+)$/im.exec(d.text||'');
+    AI.tldr=m?m[1].trim():'';AI.slip=sl;AI.kind=kind;
+    LOG.unshift({at:Date.now(),kind,target:kind==='parlay'?(TARGET||3):null,q:kind==='ask'?qq:'',tldr:AI.tldr,text:(d.text||'').replace(/^\s*TL;?DR:?.*\n?/im,'').trim(),
+      slip:sl?{pr:sl.pr,pay:sl.pay,hit:sl.hit,legs:sl.legs.map(x=>({n:x.p.name,side:x.side,thr:x.p.thr,pct:Math.round(x.chance*100),note:x.risk?riskLine(x.risk,x.side):''}))}:null});
+    LOG=LOG.slice(0,30);try{localStorage.setItem('pt-ailog',JSON.stringify(LOG))}catch(e){}
   }catch(e){AI.err=String(e.message||e)}
   AI.busy=false;render();
 }
 // ================= HISTORY -> BETS =================
-let TAB='live';var AI={busy:false,text:'',err:'',q:''};
+let TAB='live';var AI={busy:false,text:'',err:'',q:'',tldr:'',slip:null,kind:''};
 let HIST={loaded:false,ok:false,err:'',at:0},BETS=[];
 let MKT={loaded:false,ok:false,err:'',at:0,list:[]};
 let TEAMMAP=null,TEAMSTATE='',IDS=null;
@@ -972,6 +980,19 @@ function slipHTML(){
   h+=`<div class="wp" style="color:var(--or);margin-top:10px">Hits ~${(sl.pr*100).toFixed(0)}% of the time · pays ~${sl.pay.toFixed(1)}x${sl.hit?'':' · closest available to your target'}</div><div class="wp">Payout is a rough estimate from market prices. Kalshi's combo price will differ.</div></div>`;
   return h;
 }
+function sliderHTML(){const T=TARGET||3,pos=Math.round(Math.log(T/1.5)/Math.log(100/1.5)*100);
+  return `<div class="row"><b>Target multiplier</b><b id="tgtv" style="font-size:22px;color:var(--cy)">${T}x</b></div><input id="tgtr" type="range" min="0" max="100" value="${pos}" style="width:100%;margin:12px 0 2px"><div class="row mut" style="font-size:11px"><span>1.5x safer</span><span>100x longshot</span></div><button data-ai="parlay" class="btn pri" style="width:100%;margin-top:12px" ${AI.busy?'disabled':''}>${AI.busy?'Hunting for the best parlay…':'🧠 Build me a parlay'}</button>`}
+function slipLegsHTML(sl){return sl.legs.map(x=>`<div class="lg"><span>${esc(x.n||x.p.name)} <b style="margin:0">${(x.side||'').toUpperCase()} ${x.thr||x.p.thr}+</b></span><b>${x.pct!=null?x.pct:Math.round(x.chance*100)}%</b></div>`).join('')+`<div class="wp" style="text-align:left;color:var(--or)">Hits ~${(sl.pr*100).toFixed(0)}% · pays ~${sl.pay.toFixed(1)}x${sl.hit===false?' · closest to target':''}</div>`}
+function aiResultHTML(){
+  return (AI.err?`<div class="note" style="color:var(--rd);margin-top:8px">${esc(AI.err)}</div>`:'')+(AI.text?`<div class="panel" style="margin-top:10px">${AI.tldr?`<div style="font-weight:700;margin-bottom:6px">${esc(AI.tldr)}</div>`:''}${AI.slip?slipLegsHTML(AI.slip):''}<div style="margin-top:8px;white-space:pre-wrap;font-size:14px;line-height:1.5">${esc(AI.text.replace(/^\s*TL;?DR:?.*\n?/im,'').trim())}</div><div class="note" style="margin-top:6px">AI opinion. Not a guarantee, not financial advice. Saved to the Brain log.</div></div>`:'')}
+function logHTML(){
+  let h=`<div class="sec">Brain log</div>`;
+  if(!LOG.length)return h+`<div class="note">Every AI read and parlay build is saved here in plain language so you can read it back later.</div>`;
+  LOG.slice(0,15).forEach((e,i)=>{const d=new Date(e.at).toLocaleString('en-US',{month:'short',day:'numeric',hour:'numeric',minute:'2-digit',timeZone:'America/Chicago'});
+    const title=e.kind==='parlay'?`Parlay build · ${e.target}x target`:e.kind==='ask'?'Question':'Full read';
+    h+=`<div class="rank" data-log="${i}" style="display:block"><div class="row"><b>${title}</b><span class="mut" style="font-size:11px">${d}</span></div><div class="ln" style="margin-top:4px">${esc(e.tldr||e.text.slice(0,110)+'…')}</div>`+(OPENLOG===i?`${e.q?`<div class="wp" style="text-align:left">You asked: ${esc(e.q)}</div>`:''}${e.slip?slipLegsHTML(e.slip)+e.slip.legs.filter(l=>l.note).map(l=>`<div class="why" style="color:var(--mut);font-weight:500">${esc(l.n)}: ${esc(l.note)}</div>`).join(''):''}<div style="margin-top:8px;white-space:pre-wrap;font-size:13px;line-height:1.5">${esc(e.text)}</div>`:`<div class="mut" style="font-size:11px;margin-top:4px">Tap to read more</div>`)+`</div>`});
+  return h;
+}
 function parlaysHTML(){
   let h=slipHTML()+`<div class="sec">Today's parlays</div>`;
   if(!MKT.loaded)return h+emptyCard('Scanning Kalshi…','Loading open player-prop markets');
@@ -1006,8 +1027,7 @@ function parlaysHTML(){
     if(sp.length>=2){const pr=sp.reduce((a,x)=>a*x.chance,1),pay=sp.reduce((a,x)=>a*x.payout,1);
       h+=`<div class="gh" style="margin-bottom:12px"><div class="gt">Brain swing parlay · ${sp.length} legs</div><div class="wp" style="margin-top:6px">${sp.map(x=>esc(x.p.name)+' '+x.side.toUpperCase()+' '+x.p.thr+'+').join(' · ')}</div><div class="wp" style="margin-top:6px;color:var(--or)">Hits ~${(pr*100).toFixed(0)}% of the time · pays ~${pay.toFixed(0)}x · you lose most of these, so size small</div></div>`}
   }else if(RISKSTATE.busy){h+=`<div class="note">Risk Lab is loading player logs (${RISKSTATE.done}/${RISKSTATE.total})…</div>`}
-  {const T=TARGET||3,pos=Math.round(Math.log(T/1.5)/Math.log(100/1.5)*100);
-  h+=`<div class="sec" style="margin-top:14px">Ask the AI Brain</div>`+(AIOPEN?`<div class="panel"><div class="row"><b>Target multiplier</b><b id="tgtv" style="font-size:22px;color:var(--cy)">${T}x</b></div><input id="tgtr" type="range" min="0" max="100" value="${pos}" style="width:100%;margin:12px 0 2px"><div class="row mut" style="font-size:11px"><span>1.5x safer</span><span>100x longshot</span></div><button data-ai="parlay" class="btn pri" style="width:100%;margin-top:12px" ${AI.busy?'disabled':''}>${AI.busy?'Hunting for the best parlay…':'🧠 Build me a parlay'}</button><div class="note" style="margin-top:8px">It searches every open prop for the highest-chance combo near your target, updates the slip at the top, and the AI explains it below.</div></div>`:`<button data-aiopen="1" class="btn pri" style="width:100%">🧠 Have the AI build my parlay</button>`)+`${AI.err?`<div class="note" style="color:var(--rd);margin-top:8px">${esc(AI.err)}</div>`:''}${AI.text?`<div class="panel" style="margin-top:8px;white-space:pre-wrap;font-size:14px;line-height:1.5">${esc(AI.text)}</div>`:''}`}
+  h+=`<div class="sec" style="margin-top:14px">Ask the AI Brain</div>`+(AIOPEN?`<div class="panel">${sliderHTML()}<div class="note" style="margin-top:8px">It searches every open prop for the highest-chance combo near your target, updates the slip at the top, and the AI explains it below.</div></div>`:`<button data-aiopen="1" class="btn pri" style="width:100%">🧠 Have the AI build my parlay</button>`)+aiResultHTML()+`<button class="btn" data-tab="brain" style="width:100%;margin-top:10px">📜 Read Brain log</button>`;
   return h;
 }
 function picksHTML(){
@@ -1046,7 +1066,7 @@ function brainHTML(){
   if(low.length)h+=`<div class="sec">Costing you</div>`+low.map(n=>treeSkillRow(n,'#e11d48')).join('');
   h+=`<div class="sec">Market scans</div><div class="panel"><div class="row"><b>${SCAN.n} scan${SCAN.n===1?'':'s'} done</b><span class="mut" style="font-size:12px">${SCAN.at?'last '+new Date(SCAN.at).toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit',timeZone:'America/Chicago'}):'never'}</span></div><div class="note" style="text-align:left;margin-top:8px">Scanning reads every open Kalshi player prop and grows the Market Reader branch: price bands, stat mix, habit matches and edge spots. More scans unlock more sub-skills.</div>${MKT.list.length?'':`<div class="note" style="color:var(--or)">No markets loaded yet.</div>`}</div>`;
   {const c=calib();h+=`<div class="sec">Self-check · is the Brain right?</div><div class="panel">`+(c.n?`<div class="stats" style="grid-template-columns:repeat(3,minmax(0,1fr));margin-top:0"><div class="stat"><b>${c.n}</b><span>Graded calls</span></div><div class="stat"><b>${pc(c.hr)}</b><span>Actually hit</span></div><div class="stat"><b>${pc(c.ap)}</b><span>Predicted</span></div></div>${c.bk.map(b=>`<div class="barrow"><span class="mut" style="width:62px;font-size:12px">${b.lab}</span><div class="bar sm"><i style="width:${b.hit*100}%"></i></div><b>${pc(b.hit)} <small class="mut">(${b.n})</small></b></div>`).join('')}<div class="note" style="text-align:left">Error score: Brain ${c.bB.toFixed(3)} vs market ${c.bM.toFixed(3)} (lower is better). ${c.bB<c.bM?'The Brain is beating the market so far.':'The market is still at least as accurate. Trust it more until the Brain beats it.'}</div>`:`<div class="note" style="text-align:left;margin:0">The Brain logs its hit chances on today's props and grades itself after the games finish. ${c.open||0} calls waiting. Needs real results before it can claim any edge.</div>`)+`</div>`}
-  h+=`<div class="sec">Ask the Brain · AI</div><div class="panel"><input id="aiq" class="fld" style="margin-top:0" value="${esc(AI.q)}" placeholder="Ask anything, or leave blank for a full read"><button data-ai="1" class="btn pri" style="margin-top:10px;width:100%">${AI.busy?'Thinking…':'🧠 Get AI read'}</button>${AI.err?`<div class="note" style="color:var(--rd);margin-top:8px">${esc(AI.err)}</div>`:''}${AI.text?`<div style="margin-top:12px;white-space:pre-wrap;font-size:14px;line-height:1.5">${esc(AI.text)}</div><div class="note" style="margin-top:6px">AI opinion from your stats. Not a guarantee, not financial advice.</div>`:''}</div>`;
+  h+=`<div class="sec">Ask the Brain · AI</div><div class="panel"><input id="aiq" class="fld" style="margin-top:0" value="${esc(AI.q)}" placeholder="Ask anything, or leave blank for a full read"><button data-ai="1" class="btn" style="margin-top:10px;width:100%" ${AI.busy?'disabled':''}>${AI.busy?'Thinking…':'🧠 Get AI read'}</button><div style="height:1px;background:rgba(100,116,139,.2);margin:16px 0"></div>${sliderHTML()}<div class="note" style="margin-top:8px">Set a target multiplier and the Brain hunts the open props for the best parlay near it.</div></div>${aiResultHTML()}`+logHTML();
   h+=`<div class="note" style="margin-top:12px">${DBOK?'Skills are saved to your account.':'Skills are saved on this device.'} The Brain learns from your own settled bets and the open markets. It can't see other traders' positions.</div>`;
   return h;
 }
@@ -1100,6 +1120,7 @@ setInterval(tick,1000);
 if(AUTH){pollPos();pollHist();pollMkts()}
 setInterval(pollPos,5000);setInterval(pollHist,60000);setInterval(pollMkts,30000);
 setInterval(pollEspn,1000);
+document.addEventListener('click',e=>{const l=e.target.closest&&e.target.closest('[data-log]');if(!l)return;const i=+l.dataset.log;OPENLOG=OPENLOG===i?-1:i;render()});
 document.addEventListener('change',e=>{if(e.target.id==='tgtr')render()});
 document.addEventListener('click',e=>{const t=e.target.closest&&e.target.closest('[data-slip],[data-tgt]');if(!t)return;
   if(t.dataset.slip){PICKING=true;render();return}
@@ -1107,7 +1128,7 @@ document.addEventListener('click',e=>{const t=e.target.closest&&e.target.closest
   let n=v==='custom'?parseFloat((document.getElementById('tgtc')||{}).value):+v;if(!(n>=1.5))return;n=Math.min(500,n);TARGET=n;PICKING=false;try{localStorage.setItem('pt-target',String(n))}catch(x){}render()});
 document.addEventListener('input',e=>{if(e.target.id==='tgtr'){let v=1.5*Math.pow(100/1.5,e.target.value/100);v=v<10?Math.round(v*2)/2:Math.round(v);TARGET=v;const l=document.getElementById('tgtv');if(l)l.textContent=v+'x';try{localStorage.setItem('pt-target',String(v))}catch(x){}return}
 if(e.target.id==='aiq')AI.q=e.target.value});
-document.addEventListener('click',e=>{var b=e.target.closest&&e.target.closest('[data-ai]');if(b){if(b.dataset.ai==='parlay')AI.q='Build me ONE parlay aiming for about '+(TARGET||3)+'x payout, using the slip in the data as a starting point (you may swap legs). One leg per game. For each leg say why it fits my habits and risk, give the combined hit chance, and tell me honestly if that target is realistic or if I should skip.';askBrain()}});
+document.addEventListener('click',e=>{var b=e.target.closest&&e.target.closest('[data-ai]');if(b){if(b.dataset.ai==='parlay')askBrain('Build me ONE parlay aiming for about '+(TARGET||3)+'x payout, using the slip in the data as a starting point (you may swap legs). One leg per game. For each leg say why it fits my habits and risk, give the combined hit chance, and tell me honestly if that target is realistic or if I should skip.','parlay');else askBrain(AI.q,AI.q?'ask':'read')}});
 </script>
 </body>
 </html>
