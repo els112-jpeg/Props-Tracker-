@@ -16,7 +16,7 @@ let signer: ((m: string) => Promise<string>) | null = null;
 let signerFor = "";
 
 async function kget(path: string, query: Record<string, string> = {}) {
-  const keyId = Deno.env.get("KALSHI_KEY_ID")!;
+  const keyId = Deno.env.get("KALSHI_KEY_ID")!.trim();
   const pem = Deno.env.get("KALSHI_PRIVATE_KEY")!;
   if (!signer || signerFor !== pem) {
     signer = await makeSigner(pem);
@@ -49,6 +49,56 @@ async function fetchMarkets(tickers: string[], out: Record<string, any>) {
   }
 }
 
+const SERIES = ["KXNBAPRA", "KXNBAPTS", "KXNBAREB", "KXNBAAST"];
+const slim = (m: any) => ({
+  ticker: m.ticker, event_ticker: m.event_ticker, title: m.title, yes_sub_title: m.yes_sub_title,
+  yes_bid_dollars: m.yes_bid_dollars, yes_ask_dollars: m.yes_ask_dollars,
+  no_bid_dollars: m.no_bid_dollars, no_ask_dollars: m.no_ask_dollars,
+  last_price_dollars: m.last_price_dollars, yes_bid: m.yes_bid, yes_ask: m.yes_ask, last_price: m.last_price,
+  volume: m.volume, close_time: m.close_time, floor_strike: m.floor_strike, result: m.result, status: m.status,
+  mve_selected_legs: m.mve_selected_legs,
+});
+
+// All open player-prop markets, for the Picks tab.
+async function openMarkets() {
+  const out: any[] = [];
+  for (const s of SERIES) {
+    let cursor = "";
+    for (let page = 0; page < 3; page++) {
+      const q: Record<string, string> = { series_ticker: s, status: "open", limit: "1000" };
+      if (cursor) q.cursor = cursor;
+      let d: any;
+      try { d = await kget("/markets", q); } catch (_e) { break; }
+      for (const m of d.markets || []) out.push(slim(m));
+      cursor = d.cursor || "";
+      if (!cursor) break;
+    }
+  }
+  return { markets: out, at: Date.now() };
+}
+
+// Settled bets, for History / Stats / Brain.
+async function history() {
+  const settlements: any[] = [];
+  let cursor = "";
+  for (let page = 0; page < 6; page++) {
+    const q: Record<string, string> = { limit: "200" };
+    if (cursor) q.cursor = cursor;
+    const d = await kget("/portfolio/settlements", q);
+    for (const s of d.settlements || []) settlements.push(s);
+    cursor = d.cursor || "";
+    if (!cursor) break;
+  }
+  const raw: Record<string, any> = {};
+  await fetchMarkets(settlements.map((s) => s.ticker || s.market_ticker), raw);
+  const legTickers: string[] = [];
+  for (const t of Object.keys(raw)) for (const l of raw[t].mve_selected_legs || []) if (l.market_ticker) legTickers.push(l.market_ticker);
+  await fetchMarkets(legTickers.slice(0, 1500), raw);
+  const markets: Record<string, any> = {};
+  for (const t of Object.keys(raw)) markets[t] = slim(raw[t]);
+  return { settlements, markets, at: Date.now() };
+}
+
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: CORS });
   try {
@@ -65,6 +115,12 @@ Deno.serve(async (req: Request) => {
     if (missing.length) {
       return json({ error: "Server setup incomplete: missing secret " + missing.join(" and ") }, 503);
     }
+
+    let action = "positions";
+    try { const b = await req.json(); if (b && b.action) action = String(b.action); } catch (_e) { /* empty body */ }
+
+    if (action === "markets") return json(await openMarkets());
+    if (action === "history") return json(await history());
 
     // 2. Open positions (all pages).
     const positions: any[] = [];
