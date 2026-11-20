@@ -403,7 +403,7 @@ async function askBrain(){
   if(AI.busy)return;AI.busy=true;AI.err='';render();
   try{
     const t=await token();if(!t)throw new Error('Not signed in');
-    const body={question:AI.q,stats:S,skills:nodeList().filter(b=>b.learned).map(b=>({skill:b.name,parent:b.parent,level:b.level,notes:b.ins.lines,lift_pts:b.met?Math.round(b.met.lift*100):null,legs:b.met?b.met.n:null,share_of_wins:b.met?Math.round(b.met.share*100):null})),picks:(typeof picks==='function'?picks():[]).slice(0,8)};
+    const body={question:AI.q,stats:S,skills:nodeList().filter(b=>b.learned).map(b=>({skill:b.name,parent:b.parent,level:b.level,notes:b.ins.lines,lift_pts:b.met?Math.round(b.met.lift*100):null,legs:b.met?b.met.n:null,share_of_wins:b.met?Math.round(b.met.share*100):null})),picks:picks().filter(x=>!x.held).sort((a,b)=>b.rank-a.rank).slice(0,12).map(x=>({player:x.p.name,side:x.side,line:x.p.thr+'+',stat:KEYOF(x.p.stat),game:x.p.away+'@'+x.p.home,brain_pct:Math.round(x.chance*100),market_pct:Math.round(x.mkt*100),habit_fit:Math.round(x.fit*100),risk:x.risk?{state:x.risk.state,l5_avg:+x.risk.l5avg.toFixed(1),season_avg:+x.risk.savg.toFixed(1),l10:x.risk.l10,vs_opp:x.risk.oppN?x.risk.oppH+'/'+x.risk.oppN:null,volatility:x.risk.vol}:null})),swings:swings().slice(0,5).map(x=>({player:x.p.name,side:x.side,line:x.p.thr+'+',brain_pct:Math.round(x.chance*100),market_pct:Math.round(x.mkt*100),pays:+x.payout.toFixed(1)})),calibration:calib()};
     const r=await fetch(SB+'/functions/v1/brain-ai',{method:'POST',headers:{Authorization:'Bearer '+t,apikey:ANON,'Content-Type':'application/json'},body:JSON.stringify(body)});
     const d=await r.json().catch(()=>({}));
     if(!r.ok||d.error)throw new Error(d.error||('HTTP '+r.status));
@@ -415,7 +415,7 @@ async function askBrain(){
 let TAB='live';var AI={busy:false,text:'',err:'',q:''};
 let HIST={loaded:false,ok:false,err:'',at:0},BETS=[];
 let MKT={loaded:false,ok:false,err:'',at:0,list:[]};
-let TEAMMAP=null,TEAMSTATE='';
+let TEAMMAP=null,TEAMSTATE='',IDS=null;
 let S=null;                 // computed stats
 let SHEET=null,OPENBET=null,PFILTER='best';
 let TOASTS=[];
@@ -457,28 +457,28 @@ async function pollMkts(){
   if(!AUTH)return;
   try{const d=await callFn('markets');MKT={loaded:true,ok:true,err:'',at:Date.now(),list:d.markets||[]}}
   catch(e){MKT={loaded:true,ok:false,err:String(e.message||e),at:Date.now(),list:MKT.list}}
-  recompute();softRender();
+  recompute();softRender();loadRisk();
 }
 
 // ================= TEAM LOOKUP (player -> team via ESPN rosters, cached) =================
 const REV={GS:'GSW',SA:'SAS',NY:'NYK',NO:'NOP',UTAH:'UTA',WSH:'WAS'};
 async function loadTeams(){
   if(TEAMMAP||TEAMSTATE==='loading')return;
-  try{const c=JSON.parse(localStorage.getItem('pt-teams')||'null');if(c&&Date.now()-c.at<6*864e5){TEAMMAP=c.map;recompute();return}}catch(e){}
+  try{const c=JSON.parse(localStorage.getItem('pt-teams')||'null');if(c&&c.ids&&Date.now()-c.at<6*864e5){TEAMMAP=c.map;IDS=c.ids;recompute();loadRisk();return}}catch(e){}
   TEAMSTATE='loading';
   try{
     const tl=await j(ESPN+'/teams?limit=40');
     const teams=((tl.sports||[{}])[0].leagues||[{}])[0].teams||[];
-    const map={};
+    const map={},ids={};
     await Promise.all(teams.map(async t=>{
       const tm=t.team;try{
         const r=await j(ESPN+'/teams/'+tm.id+'/roster');
         const abbr=REV[tm.abbreviation]||tm.abbreviation;
-        (r.athletes||[]).forEach(a=>{(a.items?a.items:[a]).forEach(p=>{if(p.displayName||p.fullName)map[norm(p.displayName||p.fullName)]=abbr})});
+        (r.athletes||[]).forEach(a=>{(a.items?a.items:[a]).forEach(p=>{if(p.displayName||p.fullName){const kk=norm(p.displayName||p.fullName);map[kk]=abbr;if(p.id)ids[kk]=p.id}})});
       }catch(e){}
     }));
-    if(Object.keys(map).length>50){TEAMMAP=map;try{localStorage.setItem('pt-teams',JSON.stringify({at:Date.now(),map}))}catch(e){}}
-    TEAMSTATE='done';recompute();softRender();
+    if(Object.keys(map).length>50){TEAMMAP=map;IDS=ids;try{localStorage.setItem('pt-teams',JSON.stringify({at:Date.now(),map,ids}))}catch(e){}}
+    TEAMSTATE='done';recompute();softRender();loadRisk();
   }catch(e){TEAMSTATE='failed'}
 }
 const teamOf=name=>TEAMMAP?TEAMMAP[norm(name)]||null:null;
@@ -533,6 +533,9 @@ const SKILLS=[
   eval:s=>{const mx=Math.max(0,...BETS.map(b=>b.profit)),mn=Math.min(0,...BETS.map(b=>b.profit));return{lines:['Avg stake '+fmt$(s.tickets?s.staked/s.tickets:0),'Biggest win +'+fmt$(mx),'Biggest loss −'+fmt$(Math.abs(mn))],effect:'Flags when a stake is out of line with your usual size.'}}},
  {id:'edge_check',name:'Edge Check',glyph:'EC',need:8,unit:'single bet',count:s=>s.singles.length,
   eval:s=>{const a=s.singles,ap=a.reduce((x,y)=>x+y.price,0)/a.length,hr=a.filter(x=>x.hit).length/a.length;return{lines:['You pay '+Math.round(ap*100)+'¢ on average for singles','You hit '+pc(hr)+' of them',hr>=ap?'Hit rate beats the price paid so far':'Hit rate is below the price paid so far'],effect:'Compares what you pay with how often you win. A price is only good value if you hit more often than it implies.'}}},
+ {id:'risk_lab',name:'Risk Lab',glyph:'RL',need:5,unit:'player analyzed',count:()=>Object.keys(PL).length,
+  eval:()=>{const ns=Object.keys(PL),hot=[],cold=[];ns.forEach(n=>{const g=PL[n].games,v=g.map(x=>x.v[0]+x.v[1]+x.v[2]),sd=stdv(v.slice(0,25))||1,h=(mean(v.slice(0,5))-mean(v))/sd;if(h>=.5)hot.push(n);else if(h<=-.5)cold.push(n)});const c=calib();
+   return{lines:[ns.length+' players analyzed (form, history vs opponent, volatility)','🔥 Hot: '+(hot.slice(0,4).join(', ')||'none'),'🧊 Cold: '+(cold.slice(0,4).join(', ')||'none'),c.n?'Self-check: '+c.n+' graded, '+pc(c.hr)+' hit vs '+pc(c.ap)+' predicted':'Self-check: waiting for predicted games to finish'],effect:'Blends recent form, season rate and results vs tonight\'s opponent with the market price, then grades its own calls after games finish.'}}},
  {id:'market_reader',name:'Market Reader',glyph:'MR',need:20,unit:'open market',count:()=>MKT.list.length,
   eval:()=>{const L=MKT.list;const hi=L.filter(m=>{const y=yesProb(m);return y>=0.75||y<=0.25}).length;return{lines:[L.length+' open player-prop markets scanned','~'+hi+' leaning strongly one way (75%+ either side)','Re-scanned every 30 seconds'],effect:'Feeds the Picks tab with the live board.'}}},
 ];
@@ -762,6 +765,108 @@ async function doScan(){
   SCANNING=false;render();
 }
 
+// ================= RISK LAB =================
+const ESPNW='https://site.web.api.espn.com/apis/common/v3/sports/basketball/nba';
+let PL={};try{PL=JSON.parse(localStorage.getItem('pt-logs')||'{}')}catch(e){}
+let PREDS={};try{PREDS=JSON.parse(localStorage.getItem('pt-preds')||'{}')}catch(e){}
+let RISKSTATE={busy:false,done:0,total:0,err:''};
+const nab=a=>REV[a]||a;
+const mean=a=>a.length?a.reduce((x,y)=>x+y,0)/a.length:0;
+const stdv=a=>{if(a.length<3)return 0;const m=mean(a);return Math.sqrt(mean(a.map(x=>(x-m)*(x-m))))};
+const clampP=(x,a,b)=>Math.max(a,Math.min(b,x));
+function parseLog(d){
+  const L=d.labels||[],iM=L.indexOf('MIN'),iP=L.indexOf('PTS'),iR=L.indexOf('REB'),iA=L.indexOf('AST');
+  if(iP<0||iR<0||iA<0)return [];
+  const ev=d.events||{},out=[];
+  for(const st of d.seasonTypes||[]){
+    if(/preseason|all.?star/i.test(st.displayName||''))continue;
+    for(const cat of st.categories||[])for(const e of cat.events||[]){
+      const meta=ev[e.eventId];if(!meta||!e.stats)continue;
+      const min=parseFloat(e.stats[iM]);if(!(min>0))continue;
+      out.push({date:meta.gameDate||'',opp:(meta.opponent||{}).abbreviation||'',min,v:[+e.stats[iP]||0,+e.stats[iR]||0,+e.stats[iA]||0]});
+    }
+  }
+  out.sort((a,b)=>String(b.date).localeCompare(String(a.date)));
+  return out.slice(0,45);
+}
+async function loadLog(name){
+  const id=IDS&&IDS[norm(name)];if(!id)return;
+  const c=PL[name];if(c&&Date.now()-c.at<3*36e5)return;
+  const d=await j(ESPNW+'/athletes/'+id+'/gamelog');
+  const games=parseLog(d);if(games.length)PL[name]={at:Date.now(),games};
+}
+async function loadRisk(){
+  if(RISKSTATE.busy||!AUTH||!MKT.list.length||!TEAMMAP||!IDS)return;
+  const seen=new Set(),names=[];
+  [...MKT.list].map(m=>({m,p:parseMkt(m)})).filter(x=>x.p&&x.p.stat).sort((a,b)=>Math.abs(yesProb(a.m)-.5)-Math.abs(yesProb(b.m)-.5)).forEach(x=>{if(!seen.has(x.p.name)&&names.length<30){seen.add(x.p.name);names.push(x.p.name)}});
+  const todo=names.filter(n=>!(PL[n]&&Date.now()-PL[n].at<3*36e5));
+  RISKSTATE={busy:true,done:0,total:todo.length,err:''};
+  let i=0;await Promise.all(Array.from({length:5},async()=>{while(i<todo.length){const n=todo[i++];try{await loadLog(n)}catch(e){RISKSTATE.err=String(e.message||e)}RISKSTATE.done++}}));
+  RISKSTATE.busy=false;
+  try{localStorage.setItem('pt-logs',JSON.stringify(PL))}catch(e){}
+  try{picks().filter(x=>x.risk&&!x.held).slice(0,25).forEach(savePred);swings().slice(0,10).forEach(savePred)}catch(e){}
+  gradePreds();recompute();softRender();
+}
+function riskFor(p,yesMkt){
+  const L=PL[p.name];if(!L||L.games.length<8||!p.stat)return null;
+  const val=x=>p.stat.reduce((a,i)=>a+x.v[i],0),g=L.games,vals=g.map(val),hit=v=>v>=p.thr;
+  const sRate=(vals.filter(hit).length+1)/(vals.length+2);
+  const l10=vals.slice(0,10),l10h=l10.filter(hit).length,l10Rate=(l10h+sRate*2)/(l10.length+2);
+  const l5avg=mean(vals.slice(0,5)),savg=mean(vals),sd=stdv(vals.slice(0,25))||1;
+  const tm=teamOf(p.name),opp=tm?(tm===p.away?p.home:tm===p.home?p.away:''):'';
+  const og=opp?g.filter(x=>nab(x.opp)===opp):[],oh=og.filter(x=>hit(val(x))).length;
+  const oRate=og.length>=2?(oh+sRate*2)/(og.length+2):null;
+  const heat=(l5avg-savg)/sd;
+  let pm=oRate!=null?.4*l10Rate+.3*sRate+.3*oRate:.55*l10Rate+.45*sRate;
+  pm=clampP(pm+clampP(heat*.04,-.05,.05),.02,.98);
+  const blend=.5*pm+.5*yesMkt,cv=sd/Math.max(savg,1);
+  return {model:pm,mkt:yesMkt,blend,heat,state:heat>=.5?'hot':heat<=-.5?'cold':'steady',l5avg,savg,sd,vol:cv<.25?'low':cv<.4?'medium':'high',oppN:og.length,oppH:oh,opp,l10:l10h+'/'+l10.length,n:vals.length};
+}
+function riskLine(r,side){
+  const pr=side==='yes'?r.blend:1-r.blend,mk=side==='yes'?r.mkt:1-r.mkt;
+  const st=r.state==='hot'?'🔥 hot':r.state==='cold'?'🧊 cold':'steady';
+  return `Brain ${Math.round(pr*100)}% vs market ${Math.round(mk*100)}% · ${st} (L5 ${r.l5avg.toFixed(1)} vs ${r.savg.toFixed(1)} avg) · L10 ${r.l10}${r.oppN>=2?' · vs '+r.opp+' '+r.oppH+'/'+r.oppN:''} · ${r.vol} volatility`;
+}
+function riskGrade(p){return p>=.65?'Low risk':p>=.45?'Medium risk':p>=.25?'High risk':'Longshot'}
+function swings(){
+  if(!MKT.list.length)return [];
+  const held=new Set(LEGS.map(l=>l.ticker)),out=[];
+  for(const m of MKT.list){
+    const p=parseMkt(m);if(!p||!p.stat||held.has(m.ticker))continue;
+    const y=yesProb(m);if(y<.12||y>.88)continue;
+    const r=riskFor(p,y);if(!r)continue;
+    for(const side of ['yes','no']){
+      const mk=side==='yes'?y:1-y;if(mk>=.5||mk<.12)continue;
+      const pr=side==='yes'?r.blend:1-r.blend;
+      if(pr<mk+.05)continue;
+      out.push({p,side,chance:pr,mkt:mk,risk:r,ev:pr/mk-1,payout:1/mk,fit:.5,rank:pr-mk,why:[riskGrade(pr)]});
+    }
+  }
+  return out.sort((a,b)=>b.ev-a.ev);
+}
+// self-grading predictions
+function savePred(x){
+  if(!x.risk)return;const k=x.p.m.ticker+':'+x.side;if(PREDS[k])return;
+  const tm=teamOf(x.p.name),opp=tm?(tm===x.p.away?x.p.home:x.p.away):'';
+  PREDS[k]={name:x.p.name,thr:x.p.thr,stat:x.p.stat,side:x.side,date:x.p.date,opp,pred:+x.chance.toFixed(3),mkt:+x.mkt.toFixed(3)};
+}
+function gradePreds(){
+  const today=new Date().toLocaleDateString('en-CA',{timeZone:'America/Chicago'}).replace(/-/g,'');
+  for(const k in PREDS){const q=PREDS[k];if(q.hit!=null||q.date>=today)continue;
+    const L=PL[q.name];if(!L)continue;
+    const d0=Date.UTC(+q.date.slice(0,4),+q.date.slice(4,6)-1,+q.date.slice(6,8));
+    const g=L.games.find(x=>nab(x.opp)===q.opp&&Math.abs(Date.parse(x.date)-d0)<=1.6*864e5);
+    if(!g)continue;const v=q.stat.reduce((a,i)=>a+g.v[i],0);const yes=v>=q.thr;q.hit=q.side==='yes'?yes:!yes}
+  try{localStorage.setItem('pt-preds',JSON.stringify(PREDS))}catch(e){}
+}
+function calib(){
+  const G=Object.values(PREDS).filter(q=>q.hit!=null),n=G.length;if(!n)return {n:0,open:Object.keys(PREDS).length};
+  const hr=G.filter(q=>q.hit).length/n,ap=mean(G.map(q=>q.pred));
+  const bB=mean(G.map(q=>(q.pred-(q.hit?1:0))**2)),bM=mean(G.map(q=>(q.mkt-(q.hit?1:0))**2));
+  const bk=[[0,.5],[.5,.65],[.65,.8],[.8,1.01]].map(([a,b])=>{const s=G.filter(q=>q.pred>=a&&q.pred<b);return {lab:Math.round(a*100)+'-'+Math.min(100,Math.round(b*100))+'%',n:s.length,pred:mean(s.map(q=>q.pred)),hit:s.length?s.filter(q=>q.hit).length/s.length:0}}).filter(b=>b.n);
+  return {n,hr,ap,bB,bM,bk,open:Object.keys(PREDS).length-n};
+}
+
 // ================= PICKS =================
 function parseMkt(m){
   const sub=String(m.yes_sub_title||'');const name=sub.split(':')[0].trim();const t=/(\d+(?:\.\d+)?)\+/.exec(sub);
@@ -786,7 +891,9 @@ function picks(){
       const mt=med(s.thr[key]||[]);if(mt){const c=Math.exp(-Math.abs(p.thr-mt)/Math.max(mt,1));comps.push(c);if(c>0.8)why.push('Close to your usual '+mt+'+ line')}
       if(AN){for(const id of ['line_sense.low','line_sense.high','ledger.pra','ledger.single']){const a=AN.subs[id],sk=SUBBY[id];if(a&&a.n>=3&&sk.cand(Object.assign({name:p.name,side,thr:p.thr},{key}),s)){comps.push((a.h+1)/(a.n+2));why.push(sk.name+' '+a.h+'/'+a.n)}}}
       const fit=comps.length?comps.reduce((a,b)=>a+b,0)/comps.length:0.5;
-      out.push({p,side,chance,fit,rank:0.6*chance+0.4*fit,why:why.slice(0,2),held:held.has(m.ticker),key});
+      const risk=riskFor(p,y);let mk=chance,ch=chance;
+      if(risk){ch=side==='yes'?risk.blend:1-risk.blend;why.unshift(riskGrade(ch)+(risk.state!=='steady'?' · '+risk.state:''))}
+      out.push({p,side,chance:ch,mkt:mk,risk,fit,rank:0.6*ch+0.4*fit,why:why.slice(0,2),held:held.has(m.ticker),key});
     }
   }
   return out;
@@ -852,10 +959,19 @@ function parlaysHTML(){
     const prod=legs.reduce((a,x)=>a*x.chance,1);const fit=legs.reduce((a,x)=>a+x.fit,0)/legs.length;
     h+=`<div class="gh" style="margin-bottom:12px"><div class="gt">${st[0]} · ${legs.length} legs</div><div class="wp" style="margin:2px 0 8px">${st[1]}</div>`;
     legs.forEach(x=>{const lab=x.p.stat.map(i=>['PTS','REB','AST'][i]).join('·');
-      h+=`<div class="lh" style="margin-bottom:8px"><div class="av ${x.side==='yes'?'ay':'an'}">${ini(x.p.name)}</div><div class="who"><div class="nm">${esc(x.p.name)}</div><div class="ln"><span class="side ${x.side==='yes'?'s-yes':'s-no'}">${x.side.toUpperCase()}</span>${x.p.thr}+ ${lab} · ${x.p.away}@${x.p.home}</div>${x.why.length?`<div class="why">${x.why.map(esc).join(' · ')}</div>`:''}</div><div class="pct"><b>${Math.round(x.chance*100)}%</b><span>Leg</span></div></div>`});
+      h+=`<div class="lh" style="margin-bottom:8px"><div class="av ${x.side==='yes'?'ay':'an'}">${ini(x.p.name)}</div><div class="who"><div class="nm">${esc(x.p.name)}</div><div class="ln"><span class="side ${x.side==='yes'?'s-yes':'s-no'}">${x.side.toUpperCase()}</span>${x.p.thr}+ ${lab} · ${x.p.away}@${x.p.home}</div>${x.why.length?`<div class="why">${x.why.map(esc).join(' · ')}</div>`:''}${x.risk?`<div class="why" style="color:var(--mut);font-weight:500">${esc(riskLine(x.risk,x.side))}</div>`:''}</div><div class="pct"><b>${Math.round(x.chance*100)}%</b><span>Leg</span></div></div>`});
     h+=`<div class="wp" style="color:var(--or)">All ${legs.length} must hit: ~${(prod*100).toFixed(0)}% · habit fit ${Math.round(fit*100)} · fair payout ~${(1/prod).toFixed(1)}x</div></div>`;
   });
   if(!sets.some(st=>st[2].length>=2))h+=emptyCard('Not enough games open','Need props from at least 2 different games. Check back closer to tip-off.');
+  const sw=swings();
+  if(sw.length){
+    h+=`<div class="sec">Swing shots</div><div class="note" style="text-align:left;margin:0 0 8px">Longshots where the Brain's estimate beats the market price by 5+ pts. Bigger payout, but they miss most of the time. Estimates, not guarantees.</div>`;
+    sw.slice(0,4).forEach(x=>{const lab=x.p.stat.map(i=>['PTS','REB','AST'][i]).join('·');
+      h+=`<div class="gh" style="margin-bottom:10px"><div class="lh"><div class="av ${x.side==='yes'?'ay':'an'}">${ini(x.p.name)}</div><div class="who"><div class="nm">${esc(x.p.name)}</div><div class="ln"><span class="side ${x.side==='yes'?'s-yes':'s-no'}">${x.side.toUpperCase()}</span>${x.p.thr}+ ${lab} · ${x.p.away}@${x.p.home}</div><div class="why" style="color:var(--mut);font-weight:500">${esc(riskLine(x.risk,x.side))}</div></div><div class="pct"><b style="color:var(--or)">${Math.round(x.chance*100)}%</b><span>${x.payout.toFixed(1)}x pays</span></div></div><div class="wp" style="text-align:left">Market ${Math.round(x.mkt*100)}% · est. edge ${x.ev>=0?'+':''}${Math.round(x.ev*100)}% · ${riskGrade(x.chance)}</div></div>`});
+    const g3=new Set(),sp=[];for(const x of sw){if(sp.length>=3)break;if(g3.has(x.p.ev))continue;g3.add(x.p.ev);sp.push(x)}
+    if(sp.length>=2){const pr=sp.reduce((a,x)=>a*x.chance,1),pay=sp.reduce((a,x)=>a*x.payout,1);
+      h+=`<div class="gh" style="margin-bottom:12px"><div class="gt">Brain swing parlay · ${sp.length} legs</div><div class="wp" style="margin-top:6px">${sp.map(x=>esc(x.p.name)+' '+x.side.toUpperCase()+' '+x.p.thr+'+').join(' · ')}</div><div class="wp" style="margin-top:6px;color:var(--or)">Hits ~${(pr*100).toFixed(0)}% of the time · pays ~${pay.toFixed(0)}x · you lose most of these, so size small</div></div>`}
+  }else if(RISKSTATE.busy){h+=`<div class="note">Risk Lab is loading player logs (${RISKSTATE.done}/${RISKSTATE.total})…</div>`}
   h+=`<div class="sec" style="margin-top:14px">Ask the AI Brain</div><button data-ai="parlay" class="btn" style="width:100%">${AI.busy?'Thinking…':'🧠 Have the AI build my parlay'}</button>${AI.err?`<div class="note" style="color:var(--or);margin-top:8px">${esc(AI.err)}</div>`:''}${AI.text?`<div class="panel" style="margin-top:8px;padding:10px;white-space:pre-wrap;font-size:14px;line-height:1.45">${esc(AI.text)}</div>`:''}`;
   return h;
 }
@@ -868,7 +984,7 @@ function picksHTML(){
   L.sort((a,b)=>PFILTER==='safe'?b.chance-a.chance:b.rank-a.rank);
   if(!L.length)return h+emptyCard('Nothing to recommend right now','No open player-prop markets matched. Check back closer to tip-off.');
   const learned=S&&S.legs>=10;
-  h+=`<div class="note" style="margin:0 0 8px">Chance is Kalshi's current price for that side. The Brain only re-orders by your habits${learned?'':' (it is still learning, so for now ranking is mostly by chance)'}. A price is not a guarantee. Not financial advice.</div>`;
+  h+=`<div class="note" style="margin:0 0 8px">${Object.keys(PL).length?'Chance is the Brain\'s estimate: half the Kalshi price, half a model of player form, history vs the opponent and hot/cold streaks.':'Chance is Kalshi\'s current price for that side.'}${RISKSTATE.busy?' Loading player logs ('+RISKSTATE.done+'/'+RISKSTATE.total+')…':''}${learned?'':' It is still learning your habits.'} A price is not a guarantee. Not financial advice.</div>`;
   // slip
   const used=new Set(),slip=[];
   for(const x of [...L].sort((a,b)=>b.rank-a.rank)){if(slip.length>=4)break;if(used.has(x.p.ev))continue;used.add(x.p.ev);slip.push(x)}
@@ -877,7 +993,7 @@ function picksHTML(){
     const lab=x.p.stat.map(i=>['PTS','REB','AST'][i]).join('·');
     h+=`<div class="leg alive"><div class="lh"><div class="av ${x.side==='yes'?'ay':'an'}">${ini(x.p.name)}</div><div class="who"><div class="nm">${esc(x.p.name)}</div><div class="ln"><span class="side ${x.side==='yes'?'s-yes':'s-no'}">${x.side.toUpperCase()}</span>${x.p.thr}+ ${lab} · ${x.p.away}@${x.p.home}</div></div><div class="pct"><b>${Math.round(x.chance*100)}%</b><span>Chance</span></div></div>
     <div class="barrow" style="margin-top:10px"><span class="mut" style="width:62px;font-size:11px">HABIT FIT</span><div class="bar sm"><i style="width:${x.fit*100}%;background:var(--mg);color:var(--mg)"></i></div><b>${Math.round(x.fit*100)}</b></div>
-    ${x.why.length?`<div class="why">${x.why.map(esc).join(' · ')}</div>`:''}</div>`;
+    ${x.why.length?`<div class="why">${x.why.map(esc).join(' · ')}</div>`:''}${x.risk?`<div class="why" style="color:var(--mut);font-weight:500">${esc(riskLine(x.risk,x.side))}</div>`:''}</div>`;
   });
   return h;
 }
@@ -894,6 +1010,7 @@ function brainHTML(){
   h+=`<div class="sec">Most productive skills</div>`+(top.length?top.map(n=>treeSkillRow(n,'#16a34a')).join(''):`<div class="note">Nothing stands out yet. A skill needs 3+ matching legs that beat your average.</div>`);
   if(low.length)h+=`<div class="sec">Costing you</div>`+low.map(n=>treeSkillRow(n,'#e11d48')).join('');
   h+=`<div class="sec">Market scans</div><div class="panel"><div class="row"><b>${SCAN.n} scan${SCAN.n===1?'':'s'} done</b><span class="mut" style="font-size:12px">${SCAN.at?'last '+new Date(SCAN.at).toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit',timeZone:'America/Chicago'}):'never'}</span></div><div class="note" style="text-align:left;margin-top:8px">Scanning reads every open Kalshi player prop and grows the Market Reader branch: price bands, stat mix, habit matches and edge spots. More scans unlock more sub-skills.</div>${MKT.list.length?'':`<div class="note" style="color:var(--or)">No markets loaded yet.</div>`}</div>`;
+  {const c=calib();h+=`<div class="sec">Self-check · is the Brain right?</div><div class="panel">`+(c.n?`<div class="stats" style="grid-template-columns:repeat(3,minmax(0,1fr));margin-top:0"><div class="stat"><b>${c.n}</b><span>Graded calls</span></div><div class="stat"><b>${pc(c.hr)}</b><span>Actually hit</span></div><div class="stat"><b>${pc(c.ap)}</b><span>Predicted</span></div></div>${c.bk.map(b=>`<div class="barrow"><span class="mut" style="width:62px;font-size:12px">${b.lab}</span><div class="bar sm"><i style="width:${b.hit*100}%"></i></div><b>${pc(b.hit)} <small class="mut">(${b.n})</small></b></div>`).join('')}<div class="note" style="text-align:left">Error score: Brain ${c.bB.toFixed(3)} vs market ${c.bM.toFixed(3)} (lower is better). ${c.bB<c.bM?'The Brain is beating the market so far.':'The market is still at least as accurate. Trust it more until the Brain beats it.'}</div>`:`<div class="note" style="text-align:left;margin:0">The Brain logs its hit chances on today's props and grades itself after the games finish. ${c.open||0} calls waiting. Needs real results before it can claim any edge.</div>`)+`</div>`}
   h+=`<div class="sec">Ask the Brain · AI</div><div class="panel"><input id="aiq" class="fld" style="margin-top:0" value="${esc(AI.q)}" placeholder="Ask anything, or leave blank for a full read"><button data-ai="1" class="btn pri" style="margin-top:10px;width:100%">${AI.busy?'Thinking…':'🧠 Get AI read'}</button>${AI.err?`<div class="note" style="color:var(--rd);margin-top:8px">${esc(AI.err)}</div>`:''}${AI.text?`<div style="margin-top:12px;white-space:pre-wrap;font-size:14px;line-height:1.5">${esc(AI.text)}</div><div class="note" style="margin-top:6px">AI opinion from your stats. Not a guarantee, not financial advice.</div>`:''}</div>`;
   h+=`<div class="note" style="margin-top:12px">${DBOK?'Skills are saved to your account.':'Skills are saved on this device.'} The Brain learns from your own settled bets and the open markets. It can't see other traders' positions.</div>`;
   return h;
