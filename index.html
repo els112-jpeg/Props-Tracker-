@@ -411,9 +411,16 @@ async function askBrain(qq,kind){
   try{
     const t=await token();if(!t)throw new Error('Not signed in');
     const body={question:qq,stats:S,skills:nodeList().filter(b=>b.learned).map(b=>({skill:b.name,parent:b.parent,level:b.level,notes:b.ins.lines,lift_pts:b.met?Math.round(b.met.lift*100):null,legs:b.met?b.met.n:null,share_of_wins:b.met?Math.round(b.met.share*100):null})),picks:picks().filter(x=>!x.held).sort((a,b)=>b.rank-a.rank).slice(0,12).map(x=>({player:x.p.name,side:x.side,line:x.p.thr+'+',stat:KEYOF(x.p.stat),game:x.p.away+'@'+x.p.home,brain_pct:Math.round(x.chance*100),market_pct:Math.round(x.mkt*100),habit_fit:Math.round(x.fit*100),risk:x.risk?{state:x.risk.state,l5_avg:+x.risk.l5avg.toFixed(1),season_avg:+x.risk.savg.toFixed(1),l10:x.risk.l10,vs_opp:x.risk.oppN?x.risk.oppH+'/'+x.risk.oppN:null,volatility:x.risk.vol}:null})),swings:swings().slice(0,5).map(x=>({player:x.p.name,side:x.side,line:x.p.thr+'+',brain_pct:Math.round(x.chance*100),market_pct:Math.round(x.mkt*100),pays:+x.payout.toFixed(1)})),calibration:calib(),discipline:(()=>{const pl=plan();return {bankroll:BANK,plan:{bets:pl.bets.map(b=>({player:b.x.p.name,side:b.x.side,line:b.x.p.thr+'+',stake:+b.st.toFixed(2),edge_pts:Math.round((b.x.chance-b.x.mkt)*100)})),total_risk:+pl.tot.toFixed(2),daily_cap:+pl.day.toFixed(2),passed:pl.pass,waiting:pl.wait},backtest:BT&&!BT.short?{games:BT.n,model_error:+BT.model.toFixed(3),season_rate_error:+BT.base.toFixed(3),streak_adj:ADJ.streak,opp_adj:ADJ.opp}:null,price_tracking:clvStats(),injuries_listed:Object.keys(INJ).length}})(),target_multiplier:TARGET||3,slip:(()=>{const sl=buildSlip(TARGET||3);return sl?{hit_pct:Math.round(sl.pr*100),pays:+sl.pay.toFixed(1),legs:sl.legs.map(x=>({player:x.p.name,side:x.side,line:x.p.thr+'+',stat:KEYOF(x.p.stat),brain_pct:Math.round(x.chance*100),market_pct:Math.round(x.mkt*100)}))}:null})()};
+    if(kind==='combo'){body.combo=CPAY;body.slip=null}
     const r=await fetch(SB+'/functions/v1/brain-ai',{method:'POST',headers:{Authorization:'Bearer '+t,apikey:ANON,'Content-Type':'application/json'},body:JSON.stringify(body)});
     const d=await r.json().catch(()=>({}));
     if(!r.ok||d.error)throw new Error(d.error||('HTTP '+r.status));
+    if(kind==='combo'){const tx=d.text||'',mt=/^\s*TL;?DR:?\s*(.+)$/im.exec(tx);
+      if(CRES){CRES.tldr=mt?mt[1].trim():'';CRES.text=tx.replace(/^\s*TL;?DR:?.*\n?/im,'').trim()}
+      const R=CRES&&CRES.R;
+      if(R)LOG.unshift({at:Date.now(),kind:'combo',target:null,q:'',tldr:(CRES.tldr?'Grade '+R.grade+'. '+CRES.tldr:'Grade '+R.grade),text:CRES.text,slip:{pr:R.pr,pay:R.pay,legs:R.legs.map(x=>({n:x.name,side:x.side,thr:'',sub:x.sub,pct:Math.round(x.p*100),note:x.note||''}))}});
+      LOG=LOG.slice(0,30);try{localStorage.setItem('pt-ailog',JSON.stringify(LOG))}catch(e){}
+      AI.busy=false;render();return}
     AI.text=d.text;
     const sl=(kind==='parlay')?buildSlip(TARGET||3):null;
     const m=/^\s*TL;?DR:?\s*(.+)$/im.exec(d.text||'');
@@ -1063,9 +1070,81 @@ function mlistHTML(){
     for(const x of g.rows.slice(0,40)){shown++;const y=yesProb(x.r.m);let sub='';let brain='';
       if(x.p){sub=x.p.thr+'+ '+x.r.cat;if(nba){const pm=parseMkt(x.r.m);if(pm&&pm.stat){const rk=riskFor(pm,y);if(rk){const e=rk.blend-y,col=e>=MINEDGE?'var(--lm)':e<=-MINEDGE?'var(--rd)':'var(--mut)';brain=`<span style="color:${col};font-weight:700;font-size:12px">Brain ${Math.round(rk.blend*100)}%${rk.inj?' ⚠':''}</span>`}}}}
       else if(x.r.cat==='Winner')sub='to win';
-      h+=`<div class="lg"><span style="min-width:0"><b style="margin:0;font-weight:600">${esc(x.label)}</b> <span class="mut" style="font-size:12px">${esc(sub)}</span></span><span style="margin-left:auto;display:flex;gap:10px;align-items:center">${brain}<b style="margin:0">YES ${Math.round(y*100)}¢</b></span></div>`}
+      h+=`<div class="lg"><span style="min-width:0"><b style="margin:0;font-weight:600">${esc(x.label)}</b> <span class="mut" style="font-size:12px">${esc(sub)}</span></span><span style="margin-left:auto;display:flex;gap:8px;align-items:center">${brain}${COMBO?['yes','no'].map(sd=>{const on=CLEGS.some(l=>l.t===x.r.m.ticker&&l.side===sd);return `<button class="chip ${on?'on':''}" data-cadd="${esc(x.r.m.ticker)}|${sd}">${sd.toUpperCase()} ${Math.round((sd==='yes'?y:1-y)*100)}¢</button>`}).join(''):`<b style="margin:0">YES ${Math.round(y*100)}¢</b>`}</span></div>`}
     h+=`</div>`}
   return h;
+}
+// ================= COMBO BUILDER =================
+let COMBO=false,CLEGS=[],CRES=null,CPAY=null;
+function findMkt(t){const all=[...MKT.list];Object.values(MKTX).forEach(x=>all.push(...(x.list||[])));return all.find(m=>m.ticker===t)}
+function legInfo(L){
+  const m=findMkt(L.t)||L.m,y=yesProb(m),ev=m.event_ticker||String(m.ticker).split('-').slice(0,2).join('-'),pe=evG(ev);
+  const cat=pe?catOf(pe.series)[1]:'',label=String(m.yes_sub_title||m.title||L.t);
+  const mm=/^(.+?):\s*(\d+(?:\.\d+)?)\+/.exec(label);
+  const mk=L.side==='yes'?y:1-y;let br=null,inj=false,note='';
+  if(L.sport==='nba'){const pm=parseMkt(m);if(pm&&pm.stat){const rk=riskFor(pm,y);if(rk){br=L.side==='yes'?rk.blend:1-rk.blend;inj=!!rk.inj;note=riskLine(rk,L.side)}}}
+  const name=mm?mm[1].trim():label,sub=mm?mm[2]+'+ '+cat:(cat==='Winner'?'to win':cat);
+  return {t:L.t,side:L.side,ev,date:pe?pe.date:'',teams:pe?pe.teams:'',cat,name,sub,mk,br,p:br!=null?br:mk,inj,note,y};
+}
+function rateCombo(){
+  const legs=CLEGS.map(legInfo);if(legs.length<2)return null;
+  const pr=legs.reduce((a,x)=>a*x.p,1),mkp=legs.reduce((a,x)=>a*x.mk,1),pay=1/Math.max(.001,mkp),ev=pr*pay-1;
+  const byEv={};legs.forEach(x=>{(byEv[x.ev]||(byEv[x.ev]=[])).push(x)});
+  const sg=Object.values(byEv).filter(g=>g.length>1),byName={};legs.forEach(x=>{(byName[x.name]||(byName[x.name]=[])).push(x)});
+  const samePl=Object.values(byName).filter(g=>g.length>1&&g[0].cat!=='Winner'&&g[0].cat!=='Spread'&&g[0].cat!=='Total');
+  const sug=[],warn=[];
+  const nBrain=legs.filter(x=>x.br!=null).length;
+  if(nBrain<legs.length)warn.push((legs.length-nBrain)+' of '+legs.length+' legs have no Brain model (only NBA player props do), so they use the market price as the chance.');
+  if(sg.length)warn.push('Same-game legs are correlated ('+sg.map(g=>g.map(x=>x.name).join(' + ')).join('; ')+'). Multiplying chances is rough, and Kalshi may price or reject them differently.');
+  if(samePl.length)warn.push('Two legs on the same player move together. Pick one.');
+  if(legs.length>4)warn.push(legs.length+' legs: most of these lose. The Brain suggests 2 to 4.');
+  const sorted=[...legs].sort((a,b)=>a.p-b.p),weak=sorted[0];
+  const drop=x=>{const rest=legs.filter(l=>l!==x),p2=rest.reduce((a,l)=>a*l.p,1),pay2=1/Math.max(.001,rest.reduce((a,l)=>a*l.mk,1));return {p2,pay2}};
+  if(legs.length>2){const d=drop(weak);sug.push(`Drop ${weak.name} (${weak.side.toUpperCase()} ${weak.sub}, only ${Math.round(weak.p*100)}%). Hit chance goes ${(pr*100).toFixed(0)}% to ${(d.p2*100).toFixed(0)}%, pays ${pay.toFixed(1)}x to ${d.pay2.toFixed(1)}x.`)}
+  legs.forEach(x=>{if(x.br!=null){const e=x.br-x.mk;
+    if(e<=-MINEDGE)sug.push(`${x.name} ${x.side.toUpperCase()} ${x.sub}: Brain ${Math.round(x.br*100)}% vs market ${Math.round(x.mk*100)}%. Overpriced. Try the other side or swap it.`);
+    if(x.inj)sug.push(`${x.name} has an injury flag. Wait for the final status or swap.`)}});
+  if(!sug.length&&ev>=0)sug.push('Nothing obvious to change. The legs hold up against their prices.');
+  const lv=['F','D','C','B','A'];let gi=ev>=.12?4:ev>=.04?3:ev>=-.04?2:ev>=-.12?1:0;
+  if(legs.length>4)gi--;if(sg.length||samePl.length)gi--;gi=Math.max(0,gi);
+  const stake=Math.min(stakeFor(pr,1/pay),.01*BANK);
+  return {legs,pr,mkp,pay,ev,grade:lv[gi],sug,warn,weak,stake,nBrain};
+}
+function comboPayload(R,tail){
+  return {legs:R.legs.map(x=>({market:x.name,side:x.side,line:x.sub,game:x.teams,market_pct:Math.round(x.mk*100),brain_pct:x.br!=null?Math.round(x.br*100):null,injury_flag:x.inj,note:x.note||null})),
+    hit_pct:+(R.pr*100).toFixed(1),market_implied_pct:+(R.mkp*100).toFixed(1),pays:+R.pay.toFixed(1),est_ev_pct:Math.round(R.ev*100),local_grade:R.grade,warnings:R.warn,local_suggestions:R.sug,suggested_stake:+R.stake.toFixed(2)};
+}
+function comboQuick(){
+  if(CLEGS.length<1)return '';
+  const L=CLEGS.map(legInfo);const pr=L.reduce((a,x)=>a*x.p,1),pay=1/Math.max(.001,L.reduce((a,x)=>a*x.mk,1));
+  return L.length>1?`${L.length} legs · hits ~${(pr*100).toFixed(0)}% · pays ~${pay.toFixed(1)}x`:'1 leg · add one more';
+}
+function comboHTML(){
+  if(!COMBO)return '';
+  let h='';
+  if(!CLEGS.length)return `<div class="gh" style="margin-top:10px"><div class="gt">Combo builder</div><div class="wp" style="text-align:left;margin-top:6px">Tap YES or NO on any market to add it as a leg. Add 2 or more, then send it to the Brain to rate.</div></div>`;
+  const L=CLEGS.map(legInfo);
+  h+=`<div class="gh" style="margin-top:10px"><div class="gt"><span>Combo slip · ${L.length} leg${L.length>1?'s':''}</span><button class="chip" data-cclear="1">Clear</button></div>`;
+  L.forEach((x,i)=>{h+=`<div class="lg"><span style="min-width:0"><span class="side ${x.side==='yes'?'s-yes':'s-no'}">${x.side.toUpperCase()}</span> <b style="margin:0;font-weight:600">${esc(x.name)}</b> <span class="mut" style="font-size:12px">${esc(x.sub)}${x.br!=null?' · Brain '+Math.round(x.br*100)+'%':''}${x.inj?' ⚠':''}</span></span><span style="margin-left:auto;display:flex;gap:10px;align-items:center"><b style="margin:0">${Math.round(x.mk*100)}¢</b><button class="chip" data-crem="${i}" aria-label="Remove">✕</button></span></div>`});
+  h+=`<div class="wp" style="color:var(--or);margin-top:8px">${comboQuick()}</div>`;
+  h+=`<button class="btn pri" data-crate="1" style="width:100%;margin-top:10px" ${AI.busy||L.length<2?'disabled':''}>${AI.busy?'Brain is rating it…':L.length<2?'Add one more leg':'🧠 Rate with Brain'}</button>`;
+  if(CRES){const R=CRES.R,col={A:'var(--lm)',B:'var(--lm)',C:'var(--or)',D:'var(--or)',F:'var(--rd)'}[R.grade];
+    h+=`<div style="height:1px;background:rgba(100,116,139,.2);margin:14px 0"></div><div class="row"><b style="font-size:15px">Brain grade</b><b style="font-size:30px;color:${col}">${R.grade}</b></div>`;
+    if(CRES.tldr)h+=`<div style="font-weight:700;margin:4px 0 6px">${esc(CRES.tldr)}</div>`;
+    h+=`<div class="wp" style="text-align:left">Hits ~${(R.pr*100).toFixed(0)}% (market says ${(R.mkp*100).toFixed(0)}%) · pays ~${R.pay.toFixed(1)}x · est. edge ${R.ev>=0?'+':''}${Math.round(R.ev*100)}%</div>`;
+    h+=`<div class="wp" style="text-align:left;font-weight:700;color:${R.stake>0?'var(--lm)':'var(--mut)'}">💰 ${R.stake>0?'Stake up to $'+R.stake.toFixed(2)+' (1% parlay cap)':'Pass: the estimated chance does not cover the payout'}</div>`;
+    if(R.warn.length)h+=R.warn.map(w=>`<div class="why" style="color:var(--or);font-weight:500">⚠ ${esc(w)}</div>`).join('');
+    if(R.sug.length)h+=`<div class="sec" style="margin-top:12px">Changes to consider</div>`+R.sug.map(s=>`<div class="why" style="color:var(--mut);font-weight:500">• ${esc(s)}</div>`).join('');
+    if(CRES.text)h+=`<div style="margin-top:10px;white-space:pre-wrap;font-size:14px;line-height:1.5">${esc(CRES.text)}</div><div class="note" style="margin-top:6px">AI opinion. Not a guarantee, not financial advice. Saved to the Brain log.</div>`;
+    else if(AI.err)h+=`<div class="note" style="color:var(--rd)">${esc(AI.err)}</div>`}
+  return h+`</div>`;
+}
+function comboBar(){return COMBO&&CLEGS.length?`<div class="glass" style="position:fixed;left:12px;right:12px;bottom:calc(84px + env(safe-area-inset-bottom));max-width:636px;margin:0 auto;z-index:19;padding:10px 14px;border-radius:20px;display:flex;align-items:center;gap:10px;box-shadow:0 10px 30px rgba(30,41,120,.18)"><span style="font-weight:700;font-size:13px;min-width:0">🧩 ${comboQuick()}</span><button class="btn pri" data-cjump="1" style="margin-left:auto;padding:8px 14px">Review</button></div>`:''}
+function refreshCombo(){const a=document.getElementById('cslip'),l=document.getElementById('mlist'),b=document.getElementById('cbar');
+  if(a)a.innerHTML=comboHTML();if(l)l.innerHTML=mlistHTML();if(b)b.innerHTML=comboBar();LAST=''}
+async function submitCombo(){
+  const R=rateCombo();if(!R||AI.busy)return;CRES={R,tldr:'',text:''};CPAY=comboPayload(R);
+  await askBrain('Rate this custom parlay I built. In the data, combo has my legs with market_pct (price) and brain_pct (model, null if none), plus a local grade and suggestions. Give: a verdict, the single weakest leg, 1-3 specific changes (drop, swap, flip side, or reduce size) and a sensible stake. Be honest about correlation and about whether the payout is worth the risk.','combo');
 }
 function marketsHTML(){
   let h=`<div class="sec">Kalshi markets</div><div class="filters" style="margin-top:0">${SPORTL.map(f=>`<button class="chip ${MSPORT===f[0]?'on':''}" data-msport="${f[0]}">${f[1]}</button>`).join('')}</div>`;
@@ -1078,8 +1157,9 @@ function marketsHTML(){
   const cl=cats(MGRP).sort((a,b)=>(order[a]||9)-(order[b]||9));if(MCAT&&!cl.includes(MCAT))MCAT='';
   h+=`<div class="filters" style="margin-top:0">${[['player','Player props'],['game','Game props']].map(f=>`<button class="chip ${MGRP===f[0]?'on':''}" data-mgrp="${f[0]}">${f[1]}</button>`).join('')}</div>`;
   h+=`<div class="filters" style="margin-top:0"><button class="chip ${MCAT?'':'on'}" data-mcat="">All</button>${cl.map(c=>`<button class="chip ${MCAT===c?'on':''}" data-mcat="${c}">${c}</button>`).join('')}</div>`;
+  h+=`<div class="filters" style="margin-top:0"><button class="chip ${COMBO?'on':''}" data-combo="1">🧩 Combo${COMBO&&CLEGS.length?' · '+CLEGS.length:''}</button></div><div id="cslip">${comboHTML()}</div>`;
   h+=`<input id="mq" class="fld" style="margin:6px 0 0" placeholder="Search player or team" value="${esc(MQ)}">`;
-  h+=`<div id="mlist">${mlistHTML()}</div><div class="note">Prices are Kalshi's current YES price. ${MSPORT==='nba'?'"Brain" is the model\'s estimate for player points, rebounds, assists and PRA only. Green means it is 4+ pts above the price.':'The Brain only models NBA player props, so other sports show prices only.'}</div>`;
+  h+=`<div id="cbar">${comboBar()}</div><div id="mlist">${mlistHTML()}</div><div class="note">Prices are Kalshi's current YES price. ${MSPORT==='nba'?'"Brain" is the model\'s estimate for player points, rebounds, assists and PRA only. Green means it is 4+ pts above the price.':'The Brain only models NBA player props, so other sports show prices only.'}</div>`;
   return h;
 }
 function statsHTML(){
@@ -1131,14 +1211,14 @@ function slipHTML(){
 }
 function sliderHTML(){const T=TARGET||3,pos=Math.round(Math.log(T/1.5)/Math.log(100/1.5)*100);
   return `<div class="row"><b>Target multiplier</b><b id="tgtv" style="font-size:22px;color:var(--cy)">${T}x</b></div><input id="tgtr" type="range" min="0" max="100" value="${pos}" style="width:100%;margin:12px 0 2px"><div class="row mut" style="font-size:11px"><span>1.5x safer</span><span>100x longshot</span></div><button data-ai="parlay" class="btn pri" style="width:100%;margin-top:12px" ${AI.busy?'disabled':''}>${AI.busy?'Hunting for the best parlay…':'🧠 Build me a parlay'}</button>`}
-function slipLegsHTML(sl){return sl.legs.map(x=>`<div class="lg"><span>${esc(x.n||x.p.name)} <b style="margin:0">${(x.side||'').toUpperCase()} ${x.thr||x.p.thr}+</b></span><b>${x.pct!=null?x.pct:Math.round(x.chance*100)}%</b></div>`).join('')+`<div class="wp" style="text-align:left;color:var(--or)">Hits ~${(sl.pr*100).toFixed(0)}% · pays ~${sl.pay.toFixed(1)}x${sl.hit===false?' · closest to target':''}</div>`}
+function slipLegsHTML(sl){return sl.legs.map(x=>`<div class="lg"><span>${esc(x.n||(x.p&&x.p.name)||'')} <b style="margin:0">${(x.side||'').toUpperCase()} ${x.thr?x.thr+'+':esc(x.sub||'')}</b></span><b>${x.pct!=null?x.pct:Math.round(x.chance*100)}%</b></div>`).join('')+`<div class="wp" style="text-align:left;color:var(--or)">Hits ~${(sl.pr*100).toFixed(0)}% · pays ~${sl.pay.toFixed(1)}x${sl.hit===false?' · closest to target':''}</div>`}
 function aiResultHTML(){
   return (AI.err?`<div class="note" style="color:var(--rd);margin-top:8px">${esc(AI.err)}</div>`:'')+(AI.text?`<div class="panel" style="margin-top:10px">${AI.tldr?`<div style="font-weight:700;margin-bottom:6px">${esc(AI.tldr)}</div>`:''}${AI.slip?slipLegsHTML(AI.slip):''}<div style="margin-top:8px;white-space:pre-wrap;font-size:14px;line-height:1.5">${esc(AI.text.replace(/^\s*TL;?DR:?.*\n?/im,'').trim())}</div><div class="note" style="margin-top:6px">AI opinion. Not a guarantee, not financial advice. Saved to the Brain log.</div></div>`:'')}
 function logHTML(){
   let h=`<div class="sec">Brain log</div>`;
   if(!LOG.length)return h+`<div class="note">Every AI read and parlay build is saved here in plain language so you can read it back later.</div>`;
   LOG.slice(0,15).forEach((e,i)=>{const d=new Date(e.at).toLocaleString('en-US',{month:'short',day:'numeric',hour:'numeric',minute:'2-digit',timeZone:'America/Chicago'});
-    const title=e.kind==='parlay'?`Parlay build · ${e.target}x target`:e.kind==='ask'?'Question':'Full read';
+    const title=e.kind==='parlay'?`Parlay build · ${e.target}x target`:e.kind==='combo'?'Custom combo rated':e.kind==='ask'?'Question':'Full read';
     h+=`<div class="rank" data-log="${i}" style="display:block"><div class="row"><b>${title}</b><span class="mut" style="font-size:11px">${d}</span></div><div class="ln" style="margin-top:4px">${esc(e.tldr||e.text.slice(0,110)+'…')}</div>`+(OPENLOG===i?`${e.q?`<div class="wp" style="text-align:left">You asked: ${esc(e.q)}</div>`:''}${e.slip?slipLegsHTML(e.slip)+e.slip.legs.filter(l=>l.note).map(l=>`<div class="why" style="color:var(--mut);font-weight:500">${esc(l.n)}: ${esc(l.note)}</div>`).join(''):''}<div style="margin-top:8px;white-space:pre-wrap;font-size:13px;line-height:1.5">${esc(e.text)}</div>`:`<div class="mut" style="font-size:11px;margin-top:4px">Tap to read more</div>`)+`</div>`});
   return h;
 }
@@ -1321,6 +1401,14 @@ document.addEventListener('visibilitychange',()=>{if(!document.hidden)QD=1000});
 // ================= EVENTS =================
 document.addEventListener('click',e=>{
   const b=e.target.closest('button');if(!b)return;
+  if(b.dataset.combo){COMBO=!COMBO;render();return}
+  if(b.dataset.cadd){const [t,sd]=b.dataset.cadd.split('|'),i=CLEGS.findIndex(l=>l.t===t);
+    if(i>=0&&CLEGS[i].side===sd)CLEGS.splice(i,1);else{const m=findMkt(t);if(!m)return;const L={t,side:sd,sport:MSPORT,m};if(i>=0)CLEGS[i]=L;else CLEGS.push(L)}
+    CRES=null;refreshCombo();return}
+  if(b.dataset.crem!==undefined){CLEGS.splice(+b.dataset.crem,1);CRES=null;refreshCombo();return}
+  if(b.dataset.cclear){CLEGS=[];CRES=null;refreshCombo();return}
+  if(b.dataset.cjump){const a=document.getElementById('cslip');if(a)a.scrollIntoView({behavior:'smooth',block:'start'});return}
+  if(b.dataset.crate){submitCombo();return}
   if(b.dataset.rsub){RSUB=b.dataset.rsub;render();return}
   if(b.dataset.msport){MSPORT=b.dataset.msport;MGRP='player';MCAT='';MQ='';render();if(MSPORT!=='nba'&&!(MKTX[MSPORT]&&MKTX[MSPORT].loaded))pollSport(MSPORT);return}
   if(b.dataset.mgrp){MGRP=b.dataset.mgrp;MCAT='';render();return}
