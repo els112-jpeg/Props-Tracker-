@@ -1027,7 +1027,7 @@ function parlaysHTML(){
     if(sp.length>=2){const pr=sp.reduce((a,x)=>a*x.chance,1),pay=sp.reduce((a,x)=>a*x.payout,1);
       h+=`<div class="gh" style="margin-bottom:12px"><div class="gt">Brain swing parlay · ${sp.length} legs</div><div class="wp" style="margin-top:6px">${sp.map(x=>esc(x.p.name)+' '+x.side.toUpperCase()+' '+x.p.thr+'+').join(' · ')}</div><div class="wp" style="margin-top:6px;color:var(--or)">Hits ~${(pr*100).toFixed(0)}% of the time · pays ~${pay.toFixed(0)}x · you lose most of these, so size small</div></div>`}
   }else if(RISKSTATE.busy){h+=`<div class="note">Risk Lab is loading player logs (${RISKSTATE.done}/${RISKSTATE.total})…</div>`}
-  h+=`<div class="sec" style="margin-top:14px">Ask the AI Brain</div>`+(AIOPEN?`<div class="panel">${sliderHTML()}<div class="note" style="margin-top:8px">It searches every open prop for the highest-chance combo near your target, updates the slip at the top, and the AI explains it below.</div></div>`:`<button data-aiopen="1" class="btn pri" style="width:100%">🧠 Have the AI build my parlay</button>`)+aiResultHTML()+`<button class="btn" data-tab="brain" style="width:100%;margin-top:10px">📜 Read Brain log</button>`;
+  h+=`<div class="sec" style="margin-top:14px">Ask the AI Brain</div>`+(true?`<div class="panel">${sliderHTML()}<div class="note" style="margin-top:8px">It searches every open prop for the highest-chance combo near your target, updates the slip at the top, and the AI explains it below.</div></div>`:`<button data-aiopen="1" class="btn pri" style="width:100%">🧠 Have the AI build my parlay</button>`)+aiResultHTML()+`<button class="btn" data-tab="brain" style="width:100%;margin-top:10px">📜 Read Brain log</button>`;
   return h;
 }
 function picksHTML(){
