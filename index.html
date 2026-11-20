@@ -1110,6 +1110,18 @@ function rateCombo(){
   const stake=Math.min(stakeFor(pr,1/pay),.01*BANK);
   return {legs,pr,mkp,pay,ev,grade:lv[gi],sug,warn,weak,stake,nBrain};
 }
+let CNOTE=[];
+function planCombo(R){
+  let L=CLEGS.map((l,i)=>({l:Object.assign({},l),i,info:R.legs[i]})),notes=[];
+  L=L.filter(x=>{if(x.info.inj){notes.push('Removed '+x.info.name+' (injury flag)');return false}return true});
+  L.forEach(x=>{const f=x.info;if(f.br!=null&&f.br-f.mk<=-MINEDGE){x.l.side=x.l.side==='yes'?'no':'yes';x.flip=true;x.p=1-f.br;notes.push('Flipped '+f.name+' '+f.sub+' to '+x.l.side.toUpperCase()+' (Brain '+Math.round((1-f.br)*100)+'% vs market '+Math.round((1-f.mk)*100)+'%)')}else x.p=f.p});
+  const seen={};L=L.filter(x=>{if(['Winner','Spread','Total'].includes(x.info.cat))return true;const k=x.info.name,o=seen[k];if(!o){seen[k]=x;return true}
+    if(x.p>o.p){L=L;o.drop=true;seen[k]=x;notes.push('Dropped duplicate '+k+' leg');return true}notes.push('Dropped duplicate '+k+' leg');return false});
+  L=L.filter(x=>!x.drop);
+  while(L.length>2){const w=L.reduce((a,x)=>x.p<a.p?x:a);if(L.length>4||w.p<.5){notes.push('Dropped '+w.info.name+' '+w.info.sub+' (weakest, '+Math.round(w.p*100)+'%)');L=L.filter(x=>x!==w)}else break}
+  return {legs:L.map(x=>x.l),notes}
+}
+function applyCombo(){if(!CRES)return;const pl=planCombo(CRES.R);CLEGS=pl.legs;CNOTE=pl.notes.length?pl.notes:['Nothing to change.'];CRES=null;refreshCombo()}
 function comboPayload(R,tail){
   return {legs:R.legs.map(x=>({market:x.name,side:x.side,line:x.sub,game:x.teams,market_pct:Math.round(x.mk*100),brain_pct:x.br!=null?Math.round(x.br*100):null,injury_flag:x.inj,note:x.note||null})),
     hit_pct:+(R.pr*100).toFixed(1),market_implied_pct:+(R.mkp*100).toFixed(1),pays:+R.pay.toFixed(1),est_ev_pct:Math.round(R.ev*100),local_grade:R.grade,warnings:R.warn,local_suggestions:R.sug,suggested_stake:+R.stake.toFixed(2)};
@@ -1126,6 +1138,7 @@ function comboHTML(){
   const L=CLEGS.map(legInfo);
   h+=`<div class="gh" style="margin-top:10px"><div class="gt"><span>Combo slip · ${L.length} leg${L.length>1?'s':''}</span><button class="chip" data-cclear="1">Clear</button></div>`;
   L.forEach((x,i)=>{h+=`<div class="lg"><span style="min-width:0"><span class="side ${x.side==='yes'?'s-yes':'s-no'}">${x.side.toUpperCase()}</span> <b style="margin:0;font-weight:600">${esc(x.name)}</b> <span class="mut" style="font-size:12px">${esc(x.sub)}${x.br!=null?' · Brain '+Math.round(x.br*100)+'%':''}${x.inj?' ⚠':''}</span></span><span style="margin-left:auto;display:flex;gap:10px;align-items:center"><b style="margin:0">${Math.round(x.mk*100)}¢</b><button class="chip" data-crem="${i}" aria-label="Remove">✕</button></span></div>`});
+  if(CNOTE.length)h+=`<div class="panel" style="margin-top:8px"><b style="font-size:13px">✅ Brain changes applied</b>${CNOTE.map(n=>`<div class="why" style="color:var(--mut);font-weight:500">• ${esc(n)}</div>`).join('')}<div class="note" style="margin:6px 0 0">Tap Rate with Brain to check the updated combo.</div></div>`;
   h+=`<div class="wp" style="color:var(--or);margin-top:8px">${comboQuick()}</div>`;
   h+=`<button class="btn pri" data-crate="1" style="width:100%;margin-top:10px" ${AI.busy||L.length<2?'disabled':''}>${AI.busy?'Brain is rating it…':L.length<2?'Add one more leg':'🧠 Rate with Brain'}</button>`;
   if(CRES){const R=CRES.R,col={A:'var(--lm)',B:'var(--lm)',C:'var(--or)',D:'var(--or)',F:'var(--rd)'}[R.grade];
@@ -1135,6 +1148,7 @@ function comboHTML(){
     h+=`<div class="wp" style="text-align:left;font-weight:700;color:${R.stake>0?'var(--lm)':'var(--mut)'}">💰 ${R.stake>0?'Stake up to $'+R.stake.toFixed(2)+' (1% parlay cap)':'Pass: the estimated chance does not cover the payout'}</div>`;
     if(R.warn.length)h+=R.warn.map(w=>`<div class="why" style="color:var(--or);font-weight:500">⚠ ${esc(w)}</div>`).join('');
     if(R.sug.length)h+=`<div class="sec" style="margin-top:12px">Changes to consider</div>`+R.sug.map(s=>`<div class="why" style="color:var(--mut);font-weight:500">• ${esc(s)}</div>`).join('');
+    {const pl=planCombo(R);h+=pl.notes.length?`<button class="btn pri" data-capply="1" style="width:100%;margin-top:10px">✨ Make Suggested Changes</button><div class="note" style="margin:4px 0 0">Will: ${esc(pl.notes.join('; '))}</div>`:''}
     if(CRES.text)h+=`<div style="margin-top:10px;white-space:pre-wrap;font-size:14px;line-height:1.5">${esc(CRES.text)}</div><div class="note" style="margin-top:6px">AI opinion. Not a guarantee, not financial advice. Saved to the Brain log.</div>`;
     else if(AI.err)h+=`<div class="note" style="color:var(--rd)">${esc(AI.err)}</div>`}
   return h+`</div>`;
@@ -1404,11 +1418,12 @@ document.addEventListener('click',e=>{
   if(b.dataset.combo){COMBO=!COMBO;render();return}
   if(b.dataset.cadd){const [t,sd]=b.dataset.cadd.split('|'),i=CLEGS.findIndex(l=>l.t===t);
     if(i>=0&&CLEGS[i].side===sd)CLEGS.splice(i,1);else{const m=findMkt(t);if(!m)return;const L={t,side:sd,sport:MSPORT,m};if(i>=0)CLEGS[i]=L;else CLEGS.push(L)}
-    CRES=null;refreshCombo();return}
-  if(b.dataset.crem!==undefined){CLEGS.splice(+b.dataset.crem,1);CRES=null;refreshCombo();return}
-  if(b.dataset.cclear){CLEGS=[];CRES=null;refreshCombo();return}
+    CRES=null;CNOTE=[];refreshCombo();return}
+  if(b.dataset.crem!==undefined){CLEGS.splice(+b.dataset.crem,1);CRES=null;CNOTE=[];refreshCombo();return}
+  if(b.dataset.cclear){CLEGS=[];CRES=null;CNOTE=[];refreshCombo();return}
   if(b.dataset.cjump){const a=document.getElementById('cslip');if(a)a.scrollIntoView({behavior:'smooth',block:'start'});return}
-  if(b.dataset.crate){submitCombo();return}
+  if(b.dataset.capply){applyCombo();return}
+  if(b.dataset.crate){CNOTE=[];submitCombo();return}
   if(b.dataset.rsub){RSUB=b.dataset.rsub;render();return}
   if(b.dataset.msport){MSPORT=b.dataset.msport;MGRP='player';MCAT='';MQ='';render();if(MSPORT!=='nba'&&!(MKTX[MSPORT]&&MKTX[MSPORT].loaded))pollSport(MSPORT);return}
   if(b.dataset.mgrp){MGRP=b.dataset.mgrp;MCAT='';render();return}
