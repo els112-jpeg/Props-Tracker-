@@ -1056,7 +1056,14 @@ function evTitle(g){
   if(w.length>=2)return w.slice(0,2).join(' vs ');
   const t=g.pe.teams;return t.length===6?t.slice(0,3)+' @ '+t.slice(3):t;
 }
+let PG={},PGN=0,SEL={},SLIDING=false;
+function mBrain(x,nba){if(!(x.p&&nba))return '';const y=yesProb(x.r.m),pm=parseMkt(x.r.m);if(!(pm&&pm.stat))return '';const rk=riskFor(pm,y);if(!rk)return '';
+  const e=rk.blend-y,col=e>=MINEDGE?'var(--lm)':e<=-MINEDGE?'var(--rd)':'var(--mut)';return `<span style="color:${col};font-weight:700;font-size:12px">Brain ${Math.round(rk.blend*100)}%${rk.inj?' ⚠':''}</span>`}
+function mBtns(x,y){return COMBO?['yes','no'].map(sd=>{const on=CLEGS.some(l=>l.t===x.r.m.ticker&&l.side===sd);return `<button class="chip ${on?'on':''}" data-cadd="${esc(x.r.m.ticker)}|${sd}">${sd.toUpperCase()} ${Math.round((sd==='yes'?y:1-y)*100)}¢</button>`}).join(''):`<b style="margin:0">YES ${Math.round(y*100)}¢</b><b style="margin:0" class="mut">NO ${Math.round((1-y)*100)}¢</b>`}
+function pgDyn(id){const G=PG[id];if(!G)return '';const x=G.rows[SEL[G.sk]]||G.rows[0],y=yesProb(x.r.m);
+  return `<b style="margin:0;color:var(--cy);font-size:17px">${x.p.thr}+</b>${mBrain(x,G.nba)}${mBtns(x,y)}`}
 function mlistHTML(){
+  PG={};PGN=0;
   const rows=mktRows().filter(r=>r.grp===MGRP&&(!MCAT||r.cat===MCAT));const q=norm(MQ);
   const by={};
   mktRows().filter(r=>r.cat==='Winner').forEach(r=>{(by[r.ev]||(by[r.ev]={pe:r.pe,rows:[],win:[]})).win.push(r.m.yes_sub_title||r.m.title)});
@@ -1075,10 +1082,16 @@ function mlistHTML(){
     const title=wl.length>=2?wl.slice(0,2).join(' vs '):(g.pe.teams.length===6?g.pe.teams.slice(0,3)+' @ '+g.pe.teams.slice(3):g.pe.teams);
     h+=`<div class="gh" style="margin-top:12px"><div class="gt"><span style="display:flex;align-items:center">${g.pe.teams.length===6?tlogo(g.pe.teams.slice(0,3),MSPORT)+tlogo(g.pe.teams.slice(3),MSPORT):''}${esc(title)}</span><span class="mut" style="font-size:11px;font-weight:600">${fdate(g.pe.date.slice(0,4)+'-'+g.pe.date.slice(4,6)+'-'+g.pe.date.slice(6,8)+'T12:00:00Z')}</span></div>`;
     g.rows.sort((a,b)=>String(a.label).localeCompare(String(b.label))||(a.p&&b.p?a.p.thr-b.p.thr:0)||(a.r.m.floor_strike||0)-(b.r.m.floor_strike||0));
-    for(const x of g.rows.slice(0,40)){shown++;const y=yesProb(x.r.m);let sub='';let brain='';
-      if(x.p){sub=x.p.thr+'+ '+x.r.cat;if(nba){const pm=parseMkt(x.r.m);if(pm&&pm.stat){const rk=riskFor(pm,y);if(rk){const e=rk.blend-y,col=e>=MINEDGE?'var(--lm)':e<=-MINEDGE?'var(--rd)':'var(--mut)';brain=`<span style="color:${col};font-weight:700;font-size:12px">Brain ${Math.round(rk.blend*100)}%${rk.inj?' ⚠':''}</span>`}}}}
-      else if(x.r.cat==='Winner')sub='to win';
-      h+=`<div class="lg"><span style="min-width:0;display:flex;align-items:center">${x.p&&nba?`<span class="mav">${avImg(x.p.name)}</span>`:''}<span><b style="margin:0;font-weight:600">${esc(x.label)}</b> <span class="mut" style="font-size:12px">${esc(sub)}</span></span></span><span style="margin-left:auto;display:flex;gap:8px;align-items:center">${brain}${COMBO?['yes','no'].map(sd=>{const on=CLEGS.some(l=>l.t===x.r.m.ticker&&l.side===sd);return `<button class="chip ${on?'on':''}" data-cadd="${esc(x.r.m.ticker)}|${sd}">${sd.toUpperCase()} ${Math.round((sd==='yes'?y:1-y)*100)}¢</button>`}).join(''):`<b style="margin:0">YES ${Math.round(y*100)}¢</b>`}</span></div>`}
+    const sets=[],gi={};
+    g.rows.slice(0,200).forEach(x=>{if(x.p){const k=x.label+'|'+x.r.cat;if(gi[k]!=null){sets[gi[k]].push(x);return}gi[k]=sets.length}sets.push([x])});
+    for(const set of sets){if(shown>=160)break;shown+=set.length>1?2:1;
+      if(set.length>1){const id=PGN++,sk=g.ev+'|'+set[0].label+'|'+set[0].r.cat;set.sort((a,b)=>a.p.thr-b.p.thr);PG[id]={sk,rows:set,nba};
+        if(SEL[sk]==null||SEL[sk]>=set.length){let bi=0,bd=9;set.forEach((x,i)=>{const d=Math.abs(yesProb(x.r.m)-.5);if(d<bd){bd=d;bi=i}});SEL[sk]=bi}
+        const x0=set[0];
+        h+=`<div class="lg" style="flex-wrap:wrap"><span style="min-width:0;display:flex;align-items:center">${nba?`<span class="mav">${avImg(x0.p.name)}</span>`:''}<span><b style="margin:0;font-weight:600">${esc(x0.label)}</b> <span class="mut" style="font-size:12px">${esc(x0.r.cat)}</span></span></span><span id="pd${id}" style="margin-left:auto;display:flex;gap:8px;align-items:center">${pgDyn(id)}</span><div style="width:100%;margin-top:8px"><input type="range" data-pslide="${id}" min="0" max="${set.length-1}" step="1" value="${SEL[sk]}" style="width:100%"><div class="row mut" style="font-size:11px"><span>${x0.p.thr}+</span><span>${set.length} lines · slide to change</span><span>${set[set.length-1].p.thr}+</span></div></div></div>`;continue}
+      const x=set[0],y=yesProb(x.r.m);let sub='';
+      if(x.p)sub=x.p.thr+'+ '+x.r.cat;else if(x.r.cat==='Winner')sub='to win';
+      h+=`<div class="lg"><span style="min-width:0;display:flex;align-items:center">${x.p&&nba?`<span class="mav">${avImg(x.p.name)}</span>`:''}<span><b style="margin:0;font-weight:600">${esc(x.label)}</b> <span class="mut" style="font-size:12px">${esc(sub)}</span></span></span><span style="margin-left:auto;display:flex;gap:8px;align-items:center">${mBrain(x,nba)}${mBtns(x,y)}</span></div>`}
     h+=`</div>`}
   return h;
 }
@@ -1404,7 +1417,7 @@ async function quoteLoop(){
         else if(!r.ok||d.error){QOK=false;QD=Math.min(8000,QD*2);wait=QD}
         else{QMS=Math.round(performance.now()-t0);QOK=true;QN++;QD=TAB==='live'?500:1000;
           if(applyQuotes(d.markets||[])){
-            if(TAB==='markets'){const a=document.activeElement;const l=document.getElementById('mlist');if(l&&!(a&&a.id==='mq'))l.innerHTML=mlistHTML()}
+            if(TAB==='markets'){const a=document.activeElement;const l=document.getElementById('mlist');if(l&&!SLIDING&&!(a&&a.id==='mq'))l.innerHTML=mlistHTML()}
             else if(TAB==='live'){render()}
             else render();
           }
@@ -1464,7 +1477,10 @@ document.addEventListener('click',e=>{const t=e.target.closest&&e.target.closest
   if(t.dataset.slip){PICKING=true;render();return}
   const v=t.dataset.tgt;if(v==='cancel'){PICKING=false;render();return}
   let n=v==='custom'?parseFloat((document.getElementById('tgtc')||{}).value):+v;if(!(n>=1.5))return;n=Math.min(500,n);TARGET=n;PICKING=false;try{localStorage.setItem('pt-target',String(n))}catch(x){}render()});
-document.addEventListener('input',e=>{if(e.target.id==='mq'){MQ=e.target.value;const l=document.getElementById('mlist');if(l)l.innerHTML=mlistHTML();LAST='';return}
+document.addEventListener('pointerdown',e=>{if(e.target.dataset&&e.target.dataset.pslide!==undefined)SLIDING=true});
+['pointerup','pointercancel','touchend'].forEach(ev=>document.addEventListener(ev,()=>{setTimeout(()=>{SLIDING=false},400)}));
+document.addEventListener('input',e=>{if(e.target.dataset&&e.target.dataset.pslide!==undefined){const id=+e.target.dataset.pslide,G=PG[id];if(G){SEL[G.sk]=+e.target.value;const d=document.getElementById('pd'+id);if(d)d.innerHTML=pgDyn(id);LAST=''}return}
+if(e.target.id==='mq'){MQ=e.target.value;const l=document.getElementById('mlist');if(l)l.innerHTML=mlistHTML();LAST='';return}
 if(e.target.id==='bank'){const v=parseFloat(e.target.value);if(v>0){BANK=v;try{localStorage.setItem('pt-bank',String(v))}catch(x){}}return}
 if(e.target.id==='tgtr'){let v=1.5*Math.pow(100/1.5,e.target.value/100);v=v<10?Math.round(v*2)/2:Math.round(v);TARGET=v;const l=document.getElementById('tgtv');if(l)l.textContent=v+'x';try{localStorage.setItem('pt-target',String(v))}catch(x){}return}
 if(e.target.id==='aiq')AI.q=e.target.value});
