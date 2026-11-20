@@ -59,7 +59,7 @@ select,.ctrl input{background:rgba(255,255,255,.6);border:1px solid var(--ln);co
 @keyframes dng{50%{box-shadow:0 10px 34px rgba(217,119,6,.35),inset 0 1px 0 rgba(255,255,255,.95)}}
 .leg.locked{--c:#94a3b8;opacity:.72}
 .lh{display:flex;align-items:center;gap:12px}
-.av{flex:none;width:50px;height:50px;border-radius:50%;display:grid;place-items:center;font:700 16px Inter,sans-serif;color:var(--rc);background:linear-gradient(145deg,#fff,rgba(255,255,255,.4));border:2px solid var(--rc);box-shadow:0 6px 16px color-mix(in srgb,var(--rc) 30%,transparent),inset 0 1px 0 #fff}
+.av{position:relative;overflow:hidden;flex:none;width:50px;height:50px;border-radius:50%;display:grid;place-items:center;font:700 16px Inter,sans-serif;color:var(--rc);background:linear-gradient(145deg,#fff,rgba(255,255,255,.4));border:2px solid var(--rc);box-shadow:0 6px 16px color-mix(in srgb,var(--rc) 30%,transparent),inset 0 1px 0 #fff}
 .ay{--rc:var(--cy)}.an{--rc:var(--mg)}.av.off{--rc:#94a3b8}
 .who{flex:1;min-width:0}
 .nm{font:700 17px Inter,sans-serif;letter-spacing:-.01em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
@@ -129,6 +129,7 @@ input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:28px;heigh
 input[type=range]::-moz-range-thumb{width:26px;height:26px;border-radius:50%;background:#fff;border:0;box-shadow:0 4px 14px rgba(79,70,229,.5)}
 .btn:disabled{opacity:.6}
 .qs{position:fixed;top:8px;right:10px;z-index:30;font:700 10px Inter,sans-serif;color:var(--mut);padding:3px 8px;border-radius:999px;background:rgba(255,255,255,.6);backdrop-filter:blur(10px);pointer-events:none}.qs:empty{display:none}.qs.on{color:var(--lm)}
+.hsi{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;object-position:top;background:#fff;border-radius:50%}.tli{width:22px;height:22px;object-fit:contain;vertical-align:middle;margin-right:6px}.mav{flex:none;position:relative;overflow:hidden;width:34px;height:34px;border-radius:50%;display:grid;place-items:center;font:700 12px Inter,sans-serif;color:var(--mut);background:rgba(255,255,255,.7);border:1px solid rgba(100,116,139,.25);margin-right:10px}
 </style>
 </head>
 <body>
@@ -149,6 +150,13 @@ const $=s=>document.getElementById(s);
 const num=v=>{const x=parseFloat(v);return isNaN(x)?0:x};
 const norm=n=>String(n||'').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'').replace(/[^a-z ]/g,'').replace(/\b(jr|sr|ii|iii)\b/g,'').replace(/\s+/g,' ').trim();
 const ini=n=>n.replace(/[^A-Za-z .'-]/g,'').split(/\s+/).filter(Boolean).map(w=>w[0]).slice(0,2).join('').toUpperCase();
+
+const TLOGO={nba:{NYK:'ny',GSW:'gs',SAS:'sa',NOP:'no',UTA:'utah',WAS:'wsh'},nfl:{WAS:'wsh'},mlb:{CWS:'chw',WSH:'wsh'},nhl:{LAK:'la',NJD:'nj',SJS:'sj',TBL:'tb'}};
+const imgx='onerror="this.remove()" loading="lazy" referrerpolicy="no-referrer"';
+function avImg(name,sp){const id=(sp||'nba')==='nba'&&IDS&&IDS[norm(name)];const t=ini(name);
+  return id?`${t}<img class="hsi" src="https://a.espncdn.com/i/headshots/nba/players/full/${id}.png" alt="" ${imgx}>`:t}
+function tlogo(code,sp){sp=sp||'nba';if(!TLOGO[sp])return '';const a=(TLOGO[sp][code]||String(code).toLowerCase());
+  return `<img class="tli" src="https://a.espncdn.com/i/teamlogos/${sp}/500/${a}.png" alt="" ${imgx}>`}
 let AUTH=null;try{AUTH=JSON.parse(localStorage.getItem('pt-auth')||'null')}catch(e){}
 const saveAuth=()=>{try{AUTH?localStorage.setItem('pt-auth',JSON.stringify(AUTH)):localStorage.removeItem('pt-auth')}catch(e){}};
 let PS={ok:false,err:'',at:0,loaded:false};          // positions feed status
@@ -351,7 +359,7 @@ function liveHTML(){
       else if(l.yes){tag=['NEEDS '+i.need,'t-alive'];sub=i.proj!=null?'Pace '+i.proj.toFixed(1):'—'}
       else{tag=[i.danger?'DANGER · '+i.need+' LEFT':'CUSHION '+i.need,i.danger?'t-danger':'t-alive'];sub=i.proj!=null?'Pace '+i.proj.toFixed(1):'—'}
       const v=i.s||[0,0,0],lab=l.stat?l.stat.map(k=>['PTS','REB','AST'][k]).join('·'):'';
-      h+=`<div class="leg ${cls}"><div class="lh"><div class="av ${l.yes?'ay':'an'}">${ini(l.name)}</div><div class="who"><div class="nm">${l.name}</div><div class="ln"><span class="side ${l.yes?'s-yes':'s-no'}">${l.yes?'YES':'NO'}</span>${l.thr}+ ${lab||'PROP'}</div></div>
+      h+=`<div class="leg ${cls}"><div class="lh"><div class="av ${l.yes?'ay':'an'}">${avImg(l.name)}</div><div class="who"><div class="nm">${l.name}</div><div class="ln"><span class="side ${l.yes?'s-yes':'s-no'}">${l.yes?'YES':'NO'}</span>${l.thr}+ ${lab||'PROP'}</div></div>
       <div class="pct"><b>${pct(l)}%</b><span>Kalshi live</span></div></div>
       <div class="bar"><i style="width:${fill}%;background:${col};color:${col}"></i></div>
       <div class="st"><span><b>${i.tot}</b> / ${l.thr} (${fill.toFixed(0)}%)</span><span class="tag ${tag[1]}">${tag[0]}</span><span>${sub}</span></div>
@@ -1065,12 +1073,12 @@ function mlistHTML(){
   for(const g of evs){if(shown>=160){h+=`<div class="note">Showing the first 160 markets. Use search to narrow.</div>`;break}
     const wl=(by[g.ev]&&by[g.ev].win||[]).filter(x=>!/^tie/i.test(x));
     const title=wl.length>=2?wl.slice(0,2).join(' vs '):(g.pe.teams.length===6?g.pe.teams.slice(0,3)+' @ '+g.pe.teams.slice(3):g.pe.teams);
-    h+=`<div class="gh" style="margin-top:12px"><div class="gt"><span>${esc(title)}</span><span class="mut" style="font-size:11px;font-weight:600">${fdate(g.pe.date.slice(0,4)+'-'+g.pe.date.slice(4,6)+'-'+g.pe.date.slice(6,8)+'T12:00:00Z')}</span></div>`;
+    h+=`<div class="gh" style="margin-top:12px"><div class="gt"><span style="display:flex;align-items:center">${g.pe.teams.length===6?tlogo(g.pe.teams.slice(0,3),MSPORT)+tlogo(g.pe.teams.slice(3),MSPORT):''}${esc(title)}</span><span class="mut" style="font-size:11px;font-weight:600">${fdate(g.pe.date.slice(0,4)+'-'+g.pe.date.slice(4,6)+'-'+g.pe.date.slice(6,8)+'T12:00:00Z')}</span></div>`;
     g.rows.sort((a,b)=>String(a.label).localeCompare(String(b.label))||(a.p&&b.p?a.p.thr-b.p.thr:0)||(a.r.m.floor_strike||0)-(b.r.m.floor_strike||0));
     for(const x of g.rows.slice(0,40)){shown++;const y=yesProb(x.r.m);let sub='';let brain='';
       if(x.p){sub=x.p.thr+'+ '+x.r.cat;if(nba){const pm=parseMkt(x.r.m);if(pm&&pm.stat){const rk=riskFor(pm,y);if(rk){const e=rk.blend-y,col=e>=MINEDGE?'var(--lm)':e<=-MINEDGE?'var(--rd)':'var(--mut)';brain=`<span style="color:${col};font-weight:700;font-size:12px">Brain ${Math.round(rk.blend*100)}%${rk.inj?' ⚠':''}</span>`}}}}
       else if(x.r.cat==='Winner')sub='to win';
-      h+=`<div class="lg"><span style="min-width:0"><b style="margin:0;font-weight:600">${esc(x.label)}</b> <span class="mut" style="font-size:12px">${esc(sub)}</span></span><span style="margin-left:auto;display:flex;gap:8px;align-items:center">${brain}${COMBO?['yes','no'].map(sd=>{const on=CLEGS.some(l=>l.t===x.r.m.ticker&&l.side===sd);return `<button class="chip ${on?'on':''}" data-cadd="${esc(x.r.m.ticker)}|${sd}">${sd.toUpperCase()} ${Math.round((sd==='yes'?y:1-y)*100)}¢</button>`}).join(''):`<b style="margin:0">YES ${Math.round(y*100)}¢</b>`}</span></div>`}
+      h+=`<div class="lg"><span style="min-width:0;display:flex;align-items:center">${x.p&&nba?`<span class="mav">${avImg(x.p.name)}</span>`:''}<span><b style="margin:0;font-weight:600">${esc(x.label)}</b> <span class="mut" style="font-size:12px">${esc(sub)}</span></span></span><span style="margin-left:auto;display:flex;gap:8px;align-items:center">${brain}${COMBO?['yes','no'].map(sd=>{const on=CLEGS.some(l=>l.t===x.r.m.ticker&&l.side===sd);return `<button class="chip ${on?'on':''}" data-cadd="${esc(x.r.m.ticker)}|${sd}">${sd.toUpperCase()} ${Math.round((sd==='yes'?y:1-y)*100)}¢</button>`}).join(''):`<b style="margin:0">YES ${Math.round(y*100)}¢</b>`}</span></div>`}
     h+=`</div>`}
   return h;
 }
@@ -1137,7 +1145,7 @@ function comboHTML(){
   if(!CLEGS.length)return `<div class="gh" style="margin-top:10px"><div class="gt">Combo builder</div><div class="wp" style="text-align:left;margin-top:6px">Tap YES or NO on any market to add it as a leg. Add 2 or more, then send it to the Brain to rate.</div></div>`;
   const L=CLEGS.map(legInfo);
   h+=`<div class="gh" style="margin-top:10px"><div class="gt"><span>Combo slip · ${L.length} leg${L.length>1?'s':''}</span><button class="chip" data-cclear="1">Clear</button></div>`;
-  L.forEach((x,i)=>{h+=`<div class="lg"><span style="min-width:0"><span class="side ${x.side==='yes'?'s-yes':'s-no'}">${x.side.toUpperCase()}</span> <b style="margin:0;font-weight:600">${esc(x.name)}</b> <span class="mut" style="font-size:12px">${esc(x.sub)}${x.br!=null?' · Brain '+Math.round(x.br*100)+'%':''}${x.inj?' ⚠':''}</span></span><span style="margin-left:auto;display:flex;gap:10px;align-items:center"><b style="margin:0">${Math.round(x.mk*100)}¢</b><button class="chip" data-crem="${i}" aria-label="Remove">✕</button></span></div>`});
+  L.forEach((x,i)=>{h+=`<div class="lg"><span style="min-width:0">${x.br!=null?`<span class="mav" style="display:inline-grid;vertical-align:middle">${avImg(x.name)}</span>`:''}<span class="side ${x.side==='yes'?'s-yes':'s-no'}">${x.side.toUpperCase()}</span> <b style="margin:0;font-weight:600">${esc(x.name)}</b> <span class="mut" style="font-size:12px">${esc(x.sub)}${x.br!=null?' · Brain '+Math.round(x.br*100)+'%':''}${x.inj?' ⚠':''}</span></span><span style="margin-left:auto;display:flex;gap:10px;align-items:center"><b style="margin:0">${Math.round(x.mk*100)}¢</b><button class="chip" data-crem="${i}" aria-label="Remove">✕</button></span></div>`});
   if(CNOTE.length)h+=`<div class="panel" style="margin-top:8px"><b style="font-size:13px">✅ Brain changes applied</b>${CNOTE.map(n=>`<div class="why" style="color:var(--mut);font-weight:500">• ${esc(n)}</div>`).join('')}<div class="note" style="margin:6px 0 0">Tap Rate with Brain to check the updated combo.</div></div>`;
   h+=`<div class="wp" style="color:var(--or);margin-top:8px">${comboQuick()}</div>`;
   h+=`<button class="btn pri" data-crate="1" style="width:100%;margin-top:10px" ${AI.busy||L.length<2?'disabled':''}>${AI.busy?'Brain is rating it…':L.length<2?'Add one more leg':'🧠 Rate with Brain'}</button>`;
@@ -1218,7 +1226,7 @@ function slipHTML(){
   if(!sl)return h+emptyCard('No slip available','Need props from at least 2 different games.');
   h+=`<div class="gh" data-slip="1" style="cursor:pointer"><div class="gt"><span>${sl.legs.length}-leg slip · target ${T}x</span><span class="mut" style="font-size:11px;font-weight:600">${TARGET?'Tap to change':'Tap to set target'}</span></div>`;
   sl.legs.forEach(x=>{const lab=x.p.stat.map(i=>['PTS','REB','AST'][i]).join('·');
-    h+=`<div class="lh" style="margin-top:10px"><div class="av ${x.side==='yes'?'ay':'an'}">${ini(x.p.name)}</div><div class="who"><div class="nm">${esc(x.p.name)}</div><div class="ln"><span class="side ${x.side==='yes'?'s-yes':'s-no'}">${x.side.toUpperCase()}</span>${x.p.thr}+ ${lab} · ${x.p.away}@${x.p.home}</div>${x.risk?`<div class="why" style="color:var(--mut);font-weight:500">${esc(riskLine(x.risk,x.side))}</div>`:''}</div><div class="pct"><b>${Math.round(x.chance*100)}%</b><span>${payOf(x).toFixed(1)}x</span></div></div>`});
+    h+=`<div class="lh" style="margin-top:10px"><div class="av ${x.side==='yes'?'ay':'an'}">${avImg(x.p.name)}</div><div class="who"><div class="nm">${esc(x.p.name)}</div><div class="ln"><span class="side ${x.side==='yes'?'s-yes':'s-no'}">${x.side.toUpperCase()}</span>${x.p.thr}+ ${lab} · ${x.p.away}@${x.p.home}</div>${x.risk?`<div class="why" style="color:var(--mut);font-weight:500">${esc(riskLine(x.risk,x.side))}</div>`:''}</div><div class="pct"><b>${Math.round(x.chance*100)}%</b><span>${payOf(x).toFixed(1)}x</span></div></div>`});
   const sst=Math.min(stakeFor(sl.pr,1/sl.pay),.01*BANK);
   h+=`<div class="wp" style="color:var(--or);margin-top:10px">Hits ~${(sl.pr*100).toFixed(0)}% of the time · pays ~${sl.pay.toFixed(1)}x${sl.hit?'':' · closest available to your target'}</div><div class="wp" style="font-weight:700;color:${sst>0?'var(--lm)':'var(--mut)'}">💰 ${sst>0?'Suggested stake $'+sst.toFixed(2)+' (parlay cap 1% of bankroll)':'Pass: its estimated chance does not cover the payout'}</div><div class="wp">Payout is a rough estimate from market prices. Kalshi's combo price will differ.</div></div>`;
   return h;
@@ -1257,7 +1265,7 @@ function parlaysHTML(){
     const prod=legs.reduce((a,x)=>a*x.chance,1);const fit=legs.reduce((a,x)=>a+x.fit,0)/legs.length;
     h+=`<div class="gh" style="margin-bottom:12px"><div class="gt">${st[0]} · ${legs.length} legs</div><div class="wp" style="margin:2px 0 8px">${st[1]}</div>`;
     legs.forEach(x=>{const lab=x.p.stat.map(i=>['PTS','REB','AST'][i]).join('·');
-      h+=`<div class="lh" style="margin-bottom:8px"><div class="av ${x.side==='yes'?'ay':'an'}">${ini(x.p.name)}</div><div class="who"><div class="nm">${esc(x.p.name)}</div><div class="ln"><span class="side ${x.side==='yes'?'s-yes':'s-no'}">${x.side.toUpperCase()}</span>${x.p.thr}+ ${lab} · ${x.p.away}@${x.p.home}</div>${x.why.length?`<div class="why">${x.why.map(esc).join(' · ')}</div>`:''}${x.risk?`<div class="why" style="color:var(--mut);font-weight:500">${esc(riskLine(x.risk,x.side))}</div>`:''}</div><div class="pct"><b>${Math.round(x.chance*100)}%</b><span>Leg</span></div></div>`});
+      h+=`<div class="lh" style="margin-bottom:8px"><div class="av ${x.side==='yes'?'ay':'an'}">${avImg(x.p.name)}</div><div class="who"><div class="nm">${esc(x.p.name)}</div><div class="ln"><span class="side ${x.side==='yes'?'s-yes':'s-no'}">${x.side.toUpperCase()}</span>${x.p.thr}+ ${lab} · ${x.p.away}@${x.p.home}</div>${x.why.length?`<div class="why">${x.why.map(esc).join(' · ')}</div>`:''}${x.risk?`<div class="why" style="color:var(--mut);font-weight:500">${esc(riskLine(x.risk,x.side))}</div>`:''}</div><div class="pct"><b>${Math.round(x.chance*100)}%</b><span>Leg</span></div></div>`});
     h+=`<div class="wp" style="color:var(--or)">All ${legs.length} must hit: ~${(prod*100).toFixed(0)}% · habit fit ${Math.round(fit*100)} · fair payout ~${(1/prod).toFixed(1)}x</div></div>`;
   });
   if(!sets.some(st=>st[2].length>=2))h+=emptyCard('Not enough games open','Need props from at least 2 different games. Check back closer to tip-off.');
@@ -1265,7 +1273,7 @@ function parlaysHTML(){
   if(sw.length){
     h+=`<div class="sec">Swing shots</div><div class="note" style="text-align:left;margin:0 0 8px">Longshots where the Brain's estimate beats the market price by 5+ pts. Bigger payout, but they miss most of the time. Estimates, not guarantees.</div>`;
     sw.slice(0,4).forEach(x=>{const lab=x.p.stat.map(i=>['PTS','REB','AST'][i]).join('·');
-      h+=`<div class="gh" style="margin-bottom:10px"><div class="lh"><div class="av ${x.side==='yes'?'ay':'an'}">${ini(x.p.name)}</div><div class="who"><div class="nm">${esc(x.p.name)}</div><div class="ln"><span class="side ${x.side==='yes'?'s-yes':'s-no'}">${x.side.toUpperCase()}</span>${x.p.thr}+ ${lab} · ${x.p.away}@${x.p.home}</div><div class="why" style="color:var(--mut);font-weight:500">${esc(riskLine(x.risk,x.side))}</div></div><div class="pct"><b style="color:var(--or)">${Math.round(x.chance*100)}%</b><span>${x.payout.toFixed(1)}x pays</span></div></div><div class="wp" style="text-align:left">Market ${Math.round(x.mkt*100)}% · est. edge ${x.ev>=0?'+':''}${Math.round(x.ev*100)}% · ${riskGrade(x.chance)}</div></div>`});
+      h+=`<div class="gh" style="margin-bottom:10px"><div class="lh"><div class="av ${x.side==='yes'?'ay':'an'}">${avImg(x.p.name)}</div><div class="who"><div class="nm">${esc(x.p.name)}</div><div class="ln"><span class="side ${x.side==='yes'?'s-yes':'s-no'}">${x.side.toUpperCase()}</span>${x.p.thr}+ ${lab} · ${x.p.away}@${x.p.home}</div><div class="why" style="color:var(--mut);font-weight:500">${esc(riskLine(x.risk,x.side))}</div></div><div class="pct"><b style="color:var(--or)">${Math.round(x.chance*100)}%</b><span>${x.payout.toFixed(1)}x pays</span></div></div><div class="wp" style="text-align:left">Market ${Math.round(x.mkt*100)}% · est. edge ${x.ev>=0?'+':''}${Math.round(x.ev*100)}% · ${riskGrade(x.chance)}</div></div>`});
     const g3=new Set(),sp=[];for(const x of sw){if(sp.length>=3)break;if(g3.has(x.p.ev))continue;g3.add(x.p.ev);sp.push(x)}
     if(sp.length>=2){const pr=sp.reduce((a,x)=>a*x.chance,1),pay=sp.reduce((a,x)=>a*x.payout,1);
       h+=`<div class="gh" style="margin-bottom:12px"><div class="gt">Brain swing parlay · ${sp.length} legs</div><div class="wp" style="margin-top:6px">${sp.map(x=>esc(x.p.name)+' '+x.side.toUpperCase()+' '+x.p.thr+'+').join(' · ')}</div><div class="wp" style="margin-top:6px;color:var(--or)">Hits ~${(pr*100).toFixed(0)}% of the time · pays ~${pay.toFixed(0)}x · you lose most of these, so size small</div></div>`}
@@ -1313,7 +1321,7 @@ function picksHTML(){
   if(slip.length>=2){const prod=slip.reduce((a,x)=>a*x.chance,1);h+=`<div class="gh" style="margin-bottom:10px"><div class="gt">Suggested slip · ${slip.length} legs</div><div class="wp" style="margin-top:6px">${slip.map(x=>esc(x.p.name)+' '+x.side.toUpperCase()+' '+x.p.thr+'+').join(' · ')}</div><div class="wp" style="margin-top:6px;color:var(--or)">All ${slip.length} hit: ~${(prod*100).toFixed(0)}% (each leg alone is higher; chances multiply down)</div></div>`}
   L.slice(0,25).forEach(x=>{
     const lab=x.p.stat.map(i=>['PTS','REB','AST'][i]).join('·');
-    h+=`<div class="leg alive"><div class="lh"><div class="av ${x.side==='yes'?'ay':'an'}">${ini(x.p.name)}</div><div class="who"><div class="nm">${esc(x.p.name)}</div><div class="ln"><span class="side ${x.side==='yes'?'s-yes':'s-no'}">${x.side.toUpperCase()}</span>${x.p.thr}+ ${lab} · ${x.p.away}@${x.p.home}</div></div><div class="pct"><b>${Math.round(x.chance*100)}%</b><span>Chance</span></div></div>
+    h+=`<div class="leg alive"><div class="lh"><div class="av ${x.side==='yes'?'ay':'an'}">${avImg(x.p.name)}</div><div class="who"><div class="nm">${esc(x.p.name)}</div><div class="ln"><span class="side ${x.side==='yes'?'s-yes':'s-no'}">${x.side.toUpperCase()}</span>${x.p.thr}+ ${lab} · ${x.p.away}@${x.p.home}</div></div><div class="pct"><b>${Math.round(x.chance*100)}%</b><span>Chance</span></div></div>
     <div class="barrow" style="margin-top:10px"><span class="mut" style="width:62px;font-size:11px">HABIT FIT</span><div class="bar sm"><i style="width:${x.fit*100}%;background:var(--mg);color:var(--mg)"></i></div><b>${Math.round(x.fit*100)}</b></div>
     ${x.why.length?`<div class="why">${x.why.map(esc).join(' · ')}</div>`:''}${x.risk?`<div class="why" style="color:var(--mut);font-weight:500">${esc(riskLine(x.risk,x.side))}</div>`:''}${stakeHTML(x)}</div>`;
   });
