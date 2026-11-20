@@ -373,7 +373,7 @@ function liveHTML(){
 }
 function render(){
   if(!AUTH){const h=loginView();if(h!==LAST){LAST=h;$('app').innerHTML=h}tags([]);return}
-  const body=TAB==='live'?liveHTML():TAB==='record'?recordHTML():TAB==='markets'?marketsHTML():TAB==='picks'?picksHTML():TAB==='parlays'?parlaysHTML():brainHTML();
+  const body=TAB==='live'?liveHTML():TAB==='record'?recordHTML():TAB==='markets'?marketsHTML():TAB==='picks'?picksHTML():TAB==='parlays'?parlaysHTML():TAB==='profile'?profileHTML():brainHTML();
   const h=(TAB==='live'?'':hdrHTML())+body+navHTML()+sheetHTML();
   if(h!==LAST){LAST=h;$('app').innerHTML=h}
   tags(GAMES);tick();
@@ -418,7 +418,7 @@ async function askBrain(qq,kind){
   if(AI.busy)return;AI.busy=true;AI.err='';render();
   try{
     const t=await token();if(!t)throw new Error('Not signed in');
-    const body={question:qq,stats:S,skills:nodeList().filter(b=>b.learned).map(b=>({skill:b.name,parent:b.parent,level:b.level,notes:b.ins.lines,lift_pts:b.met?Math.round(b.met.lift*100):null,legs:b.met?b.met.n:null,share_of_wins:b.met?Math.round(b.met.share*100):null})),picks:picks().filter(x=>!x.held).sort((a,b)=>b.rank-a.rank).slice(0,12).map(x=>({player:x.p.name,side:x.side,line:x.p.thr+'+',stat:KEYOF(x.p.stat),game:x.p.away+'@'+x.p.home,brain_pct:Math.round(x.chance*100),market_pct:Math.round(x.mkt*100),habit_fit:Math.round(x.fit*100),risk:x.risk?{state:x.risk.state,l5_avg:+x.risk.l5avg.toFixed(1),season_avg:+x.risk.savg.toFixed(1),l10:x.risk.l10,vs_opp:x.risk.oppN?x.risk.oppH+'/'+x.risk.oppN:null,volatility:x.risk.vol}:null})),swings:swings().slice(0,5).map(x=>({player:x.p.name,side:x.side,line:x.p.thr+'+',brain_pct:Math.round(x.chance*100),market_pct:Math.round(x.mkt*100),pays:+x.payout.toFixed(1)})),calibration:calib(),discipline:(()=>{const pl=plan();return {bankroll:BANK,plan:{bets:pl.bets.map(b=>({player:b.x.p.name,side:b.x.side,line:b.x.p.thr+'+',stake:+b.st.toFixed(2),edge_pts:Math.round((b.x.chance-b.x.mkt)*100)})),total_risk:+pl.tot.toFixed(2),daily_cap:+pl.day.toFixed(2),passed:pl.pass,waiting:pl.wait},backtest:BT&&!BT.short?{games:BT.n,model_error:+BT.model.toFixed(3),season_rate_error:+BT.base.toFixed(3),streak_adj:ADJ.streak,opp_adj:ADJ.opp}:null,price_tracking:clvStats(),injuries_listed:Object.keys(INJ).length}})(),target_multiplier:TARGET||3,slip:(()=>{const sl=buildSlip(TARGET||3);return sl?{hit_pct:Math.round(sl.pr*100),pays:+sl.pay.toFixed(1),legs:sl.legs.map(x=>({player:x.p.name,side:x.side,line:x.p.thr+'+',stat:KEYOF(x.p.stat),brain_pct:Math.round(x.chance*100),market_pct:Math.round(x.mkt*100)}))}:null})()};
+    const body={question:qq,stats:S,skills:nodeList().filter(b=>b.learned).map(b=>({skill:b.name,parent:b.parent,level:b.level,notes:b.ins.lines,lift_pts:b.met?Math.round(b.met.lift*100):null,legs:b.met?b.met.n:null,share_of_wins:b.met?Math.round(b.met.share*100):null})),picks:picks().filter(x=>!x.held).sort((a,b)=>b.rank-a.rank).slice(0,12).map(x=>({player:x.p.name,side:x.side,line:x.p.thr+'+',stat:KEYOF(x.p.stat),game:x.p.away+'@'+x.p.home,brain_pct:Math.round(x.chance*100),market_pct:Math.round(x.mkt*100),habit_fit:Math.round(x.fit*100),risk:x.risk?{state:x.risk.state,l5_avg:+x.risk.l5avg.toFixed(1),season_avg:+x.risk.savg.toFixed(1),l10:x.risk.l10,vs_opp:x.risk.oppN?x.risk.oppH+'/'+x.risk.oppN:null,volatility:x.risk.vol}:null})),swings:swings().slice(0,5).map(x=>({player:x.p.name,side:x.side,line:x.p.thr+'+',brain_pct:Math.round(x.chance*100),market_pct:Math.round(x.mkt*100),pays:+x.payout.toFixed(1)})),calibration:calib(),discipline:(()=>{const pl=plan();return {tilt:PROF.tilt,bankroll:BANK,plan:{bets:pl.bets.map(b=>({player:b.x.p.name,side:b.x.side,line:b.x.p.thr+'+',stake:+b.st.toFixed(2),edge_pts:Math.round((b.x.chance-b.x.mkt)*100)})),total_risk:+pl.tot.toFixed(2),daily_cap:+pl.day.toFixed(2),passed:pl.pass,waiting:pl.wait},backtest:BT&&!BT.short?{games:BT.n,model_error:+BT.model.toFixed(3),season_rate_error:+BT.base.toFixed(3),streak_adj:ADJ.streak,opp_adj:ADJ.opp}:null,price_tracking:clvStats(),injuries_listed:Object.keys(INJ).length}})(),target_multiplier:TARGET||3,slip:(()=>{const sl=buildSlip(TARGET||3);return sl?{hit_pct:Math.round(sl.pr*100),pays:+sl.pay.toFixed(1),legs:sl.legs.map(x=>({player:x.p.name,side:x.side,line:x.p.thr+'+',stat:KEYOF(x.p.stat),brain_pct:Math.round(x.chance*100),market_pct:Math.round(x.mkt*100)}))}:null})()};
     if(kind==='combo'){body.combo=CPAY;body.slip=null}
     const r=await fetch(SB+'/functions/v1/brain-ai',{method:'POST',headers:{Authorization:'Bearer '+t,apikey:ANON,'Content-Type':'application/json'},body:JSON.stringify(body)});
     const d=await r.json().catch(()=>({}));
@@ -922,7 +922,12 @@ async function loadInj(){
   INJ=o;INJAT=Date.now();
 }
 let BANK=100;try{BANK=+localStorage.getItem('pt-bank')||100}catch(e){}
-const MINEDGE=.04,CAPBET=.03,CAPDAY=.10,KF=.25;
+let MINEDGE=.04,CAPBET=.03,CAPDAY=.10,KF=.25,PCAP=.01;
+let PROF={name:'',pic:'',tilt:'neutral',sl:null};try{Object.assign(PROF,JSON.parse(localStorage.getItem('pt-prof')||'{}'))}catch(e){}
+const TILTS={passive:{n:'Passive',d:'Fewer, safer bets',v:[.06,.02,.06,.15,.005]},neutral:{n:'Neutral',d:'Balanced default',v:[.04,.03,.10,.25,.01]},aggressive:{n:'Aggressive',d:'Bigger swings, more variance',v:[.03,.04,.15,.35,.015]}};
+function applyTilt(){const t=(TILTS[PROF.tilt]||TILTS.neutral).v;MINEDGE=t[0];CAPBET=t[1];CAPDAY=t[2];KF=t[3];PCAP=t[4]}
+function saveProf(){try{localStorage.setItem('pt-prof',JSON.stringify(PROF))}catch(e){}}
+applyTilt();
 function stakeFor(p,q){const e=p-q;if(!(e>=MINEDGE)||q>=.97)return 0;return Math.min(CAPBET,KF*e/(1-q))*BANK}
 function stakeNote(x){
   if(!x.risk)return {t:'Waiting for player data',k:'wait'};
@@ -1128,7 +1133,7 @@ function rateCombo(){
   if(!sug.length&&ev>=0)sug.push('Nothing obvious to change. The legs hold up against their prices.');
   const lv=['F','D','C','B','A'];let gi=ev>=.12?4:ev>=.04?3:ev>=-.04?2:ev>=-.12?1:0;
   if(legs.length>4)gi--;if(sg.length||samePl.length)gi--;gi=Math.max(0,gi);
-  const stake=Math.min(stakeFor(pr,1/pay),.01*BANK);
+  const stake=Math.min(stakeFor(pr,1/pay),PCAP*BANK);
   return {legs,pr,mkp,pay,ev,grade:lv[gi],sug,warn,weak,stake,nBrain};
 }
 let CNOTE=[];
@@ -1166,7 +1171,7 @@ function comboHTML(){
     h+=`<div style="height:1px;background:rgba(100,116,139,.2);margin:14px 0"></div><div class="row"><b style="font-size:15px">Brain grade</b><b style="font-size:30px;color:${col}">${R.grade}</b></div>`;
     if(CRES.tldr)h+=`<div style="font-weight:700;margin:4px 0 6px">${esc(CRES.tldr)}</div>`;
     h+=`<div class="wp" style="text-align:left">Hits ~${(R.pr*100).toFixed(0)}% (market says ${(R.mkp*100).toFixed(0)}%) · pays ~${R.pay.toFixed(1)}x · est. edge ${R.ev>=0?'+':''}${Math.round(R.ev*100)}%</div>`;
-    h+=`<div class="wp" style="text-align:left;font-weight:700;color:${R.stake>0?'var(--lm)':'var(--mut)'}">💰 ${R.stake>0?'Stake up to $'+R.stake.toFixed(2)+' (1% parlay cap)':'Pass: the estimated chance does not cover the payout'}</div>`;
+    h+=`<div class="wp" style="text-align:left;font-weight:700;color:${R.stake>0?'var(--lm)':'var(--mut)'}">💰 ${R.stake>0?'Stake up to $'+R.stake.toFixed(2)+' ('+(PCAP*100).toFixed(1).replace('.0','')+'% parlay cap)':'Pass: the estimated chance does not cover the payout'}</div>`;
     if(R.warn.length)h+=R.warn.map(w=>`<div class="why" style="color:var(--or);font-weight:500">⚠ ${esc(w)}</div>`).join('');
     if(R.sug.length)h+=`<div class="sec" style="margin-top:12px">Changes to consider</div>`+R.sug.map(s=>`<div class="why" style="color:var(--mut);font-weight:500">• ${esc(s)}</div>`).join('');
     {const pl=planCombo(R);h+=pl.notes.length?`<button class="btn pri" data-capply="1" style="width:100%;margin-top:10px">✨ Make Suggested Changes</button><div class="note" style="margin:4px 0 0">Will: ${esc(pl.notes.join('; '))}</div>`:''}
@@ -1240,8 +1245,8 @@ function slipHTML(){
   h+=`<div class="gh" data-slip="1" style="cursor:pointer"><div class="gt"><span>${sl.legs.length}-leg slip · target ${T}x</span><span class="mut" style="font-size:11px;font-weight:600">${TARGET?'Tap to change':'Tap to set target'}</span></div>`;
   sl.legs.forEach(x=>{const lab=x.p.stat.map(i=>['PTS','REB','AST'][i]).join('·');
     h+=`<div class="lh" style="margin-top:10px"><div class="av ${x.side==='yes'?'ay':'an'}">${avImg(x.p.name)}</div><div class="who"><div class="nm">${esc(x.p.name)}</div><div class="ln"><span class="side ${x.side==='yes'?'s-yes':'s-no'}">${x.side.toUpperCase()}</span>${x.p.thr}+ ${lab} · ${x.p.away}@${x.p.home}</div>${x.risk?`<div class="why" style="color:var(--mut);font-weight:500">${esc(riskLine(x.risk,x.side))}</div>`:''}</div><div class="pct"><b>${Math.round(x.chance*100)}%</b><span>${payOf(x).toFixed(1)}x</span></div></div>`});
-  const sst=Math.min(stakeFor(sl.pr,1/sl.pay),.01*BANK);
-  h+=`<div class="wp" style="color:var(--or);margin-top:10px">Hits ~${(sl.pr*100).toFixed(0)}% of the time · pays ~${sl.pay.toFixed(1)}x${sl.hit?'':' · closest available to your target'}</div><div class="wp" style="font-weight:700;color:${sst>0?'var(--lm)':'var(--mut)'}">💰 ${sst>0?'Suggested stake $'+sst.toFixed(2)+' (parlay cap 1% of bankroll)':'Pass: its estimated chance does not cover the payout'}</div><div class="wp">Payout is a rough estimate from market prices. Kalshi's combo price will differ.</div></div>`;
+  const sst=Math.min(stakeFor(sl.pr,1/sl.pay),PCAP*BANK);
+  h+=`<div class="wp" style="color:var(--or);margin-top:10px">Hits ~${(sl.pr*100).toFixed(0)}% of the time · pays ~${sl.pay.toFixed(1)}x${sl.hit?'':' · closest available to your target'}</div><div class="wp" style="font-weight:700;color:${sst>0?'var(--lm)':'var(--mut)'}">💰 ${sst>0?'Suggested stake $'+sst.toFixed(2)+' (parlay cap '+(PCAP*100).toFixed(1).replace('.0','')+'% of bankroll)':'Pass: its estimated chance does not cover the payout'}</div><div class="wp">Payout is a rough estimate from market prices. Kalshi's combo price will differ.</div></div>`;
   return h;
 }
 function sliderHTML(){const T=TARGET||3,pos=Math.round(Math.log(T/1.5)/Math.log(100/1.5)*100);
@@ -1380,9 +1385,37 @@ function sheetHTML(){
   if(!b.parent){const kids=nodes.filter(x=>x.parent===b.id);if(kids.length)h+=`<div class="sec" style="margin-top:12px">Sub-skills</div>`+kids.map(k=>`<div class="sub" data-skill="${k.id}"><b>${esc(k.name)}</b><span class="mut" style="font-size:12px">${k.learned?'LV '+k.level:'🔒 '+k.n+'/'+k.need}</span><span class="v" style="color:${k.met&&k.met.n>=3?(k.met.lift>=.05?'var(--lm)':k.met.lift<=-.05?'var(--rd)':'var(--mut)'):'var(--mut)'}">${k.met&&k.met.n>=3?sgn(k.met.lift):''}</span></div>`).join('')}
   return h+`</div></div>`;
 }
+
+// ================= PROFILE =================
+let SLST={busy:false,err:'',leagues:null};
+function connRow(name,ico,st,ok,detail,action){return `<div class="gh" style="margin-top:10px"><div class="gt"><span>${ico} ${name}</span><span style="font-size:12px;font-weight:700;color:${ok===true?'var(--lm)':ok===false?'var(--or)':'var(--mut)'}">${st}</span></div><div class="wp" style="text-align:left;margin-top:6px">${detail}</div>${action||''}</div>`}
+function profileHTML(){
+  let h=`<div class="sec">Profile</div><div class="gh"><div class="lh"><label for="pfile" class="av ay" style="cursor:pointer;width:64px;height:64px">${PROF.pic?`<img class="hsi" src="${PROF.pic}" alt="">`:ini(PROF.name||'You')}</label><input id="pfile" type="file" accept="image/*" hidden><div class="who"><input id="pname" class="fld" style="margin:0" placeholder="Your name" value="${esc(PROF.name)}" maxlength="30"><div class="ln" style="margin-top:6px">${AUTH&&AUTH.email?esc(AUTH.email):''}</div></div></div><div class="row" style="margin-top:10px"><label for="pfile" class="btn" style="cursor:pointer">Change photo</label>${PROF.pic?`<button class="btn" data-ppic="clear">Remove</button>`:''}</div></div>`;
+  h+=`<div class="sec">Brain trade tilt</div><div class="filters" style="margin-top:0">${Object.keys(TILTS).map(k=>`<button class="chip ${PROF.tilt===k?'on':''}" data-tilt="${k}">${TILTS[k].n}</button>`).join('')}</div>`;
+  const T=TILTS[PROF.tilt]||TILTS.neutral;
+  h+=`<div class="gh"><div class="gt">${T.n} · ${T.d}</div><div class="wp" style="text-align:left;margin-top:6px">Needs a ${Math.round(MINEDGE*100)}-pt edge to bet · up to ${Math.round(CAPBET*100)}% of bankroll per bet · ${Math.round(CAPDAY*100)}% per day · parlays capped at ${(PCAP*100).toFixed(1).replace('.0','')}% · Kelly fraction ${KF}</div><div class="note" style="margin:6px 0 0">Tilt changes how much the Brain risks and how willing it is to take longshots. Even Aggressive stays inside hard caps, and it raises variance: expect bigger losing streaks too.</div></div>`;
+  h+=`<div class="sec">Connectors</div>`;
+  const kok=HIST.loaded&&HIST.ok;
+  h+=connRow('Kalshi','🟦',HIST.loaded?(kok?'Connected':'Problem'):'Checking…',HIST.loaded?(kok?true:false):null,kok?'Linked through your secure server key. Reads your positions and history. This app cannot place orders.':esc(HIST.err||'Waiting'),'');
+  h+=connRow('Claude (Brain)','🧠',AI.err?'Problem':'Active',AI.err?false:true,AI.err?esc(AI.err):'Runs on Claude Haiku through your server key. Your key never touches this browser.','');
+  const sl=PROF.sl;
+  h+=connRow('Sleeper','🛌',sl?'Connected':'Not linked',sl?true:null,sl?`Signed in as <b>${esc(sl.name)}</b>${SLST.leagues!=null?' · '+SLST.leagues.length+' NFL league'+(SLST.leagues.length===1?'':'s')+': '+esc(SLST.leagues.slice(0,3).join(', ')):''}. Read-only, public Sleeper data.`:'Link by username. Sleeper has a public read-only API, no password needed.',sl?`<button class="btn" data-sl="off" style="margin-top:8px">Unlink</button>`:`<div class="ctrl" style="margin-top:8px;justify-content:flex-start"><input id="slu" class="fld" style="margin:0;width:170px" placeholder="Sleeper username"><button class="btn pri" data-sl="on" ${SLST.busy?'disabled':''}>${SLST.busy?'Linking…':'Link'}</button></div>${SLST.err?`<div class="note" style="color:var(--rd)">${esc(SLST.err)}</div>`:''}`);
+  h+=connRow('Polymarket','🔮','Not available',null,'Market data is public, but trading needs a crypto wallet key, and I will not store one in a browser. Read-only market prices could be added later.','');
+  h+=connRow('ESPN Fantasy','🏈','Not available',null,'ESPN has no official login for third-party apps. Private leagues need your ESPN session cookies, which is fragile and risky to store. Sleeper is the supported fantasy link for now.','');
+  return h;
+}
+async function linkSleeper(u){
+  u=(u||'').trim();if(!u)return;SLST={busy:true,err:'',leagues:null};render();
+  try{const r=await fetch('https://api.sleeper.app/v1/user/'+encodeURIComponent(u));const d=await r.json();if(!d||!d.user_id)throw new Error('No Sleeper user named "'+u+'"');
+    PROF.sl={id:d.user_id,name:d.display_name||d.username||u};saveProf();await loadSleeper()}catch(e){SLST.err=String(e.message||e)}
+  SLST.busy=false;render();
+}
+async function loadSleeper(){if(!PROF.sl)return;try{const yr=new Date().getFullYear();const r=await fetch('https://api.sleeper.app/v1/user/'+PROF.sl.id+'/leagues/nfl/'+yr);const d=await r.json();SLST.leagues=Array.isArray(d)?d.map(l=>l.name):[]}catch(e){}}
+function picResize(file){return new Promise((res,rej)=>{const fr=new FileReader();fr.onload=()=>{const im=new Image();im.onload=()=>{const c=document.createElement('canvas'),n=160,m=Math.min(im.width,im.height);c.width=c.height=n;c.getContext('2d').drawImage(im,(im.width-m)/2,(im.height-m)/2,m,m,0,0,n,n);res(c.toDataURL('image/jpeg',.82))};im.onerror=rej;im.src=fr.result};fr.onerror=rej;fr.readAsDataURL(file)})}
+if(PROF.sl)setTimeout(()=>loadSleeper().then(()=>{if(TAB==='profile')render()}),1500);
 function navHTML(){
-  const T=[['live','◉','Live'],['markets','▦','Markets'],['picks','★','Picks'],['parlays','⚡','Parlays'],['record','☰','Record'],['brain','✦','Brain']];
-  return `<nav class="nav">${T.map(t=>`<button data-tab="${t[0]}" class="${TAB===t[0]?'on':''}"><i>${t[1]}</i>${t[2]}</button>`).join('')}</nav>`+(TOASTS.length?`<div class="toasts">${TOASTS.map(t=>`<div class="toast">${esc(t)}</div>`).join('')}</div>`:'');
+  const T=[['live','◉','Live'],['markets','▦','Markets'],['picks','★','Picks'],['parlays','⚡','Parlays'],['record','☰','Record'],['brain','✦','Brain'],['profile','',PROF.name?PROF.name.split(' ')[0].slice(0,7):'Profile']];
+  return `<nav class="nav">${T.map(t=>`<button data-tab="${t[0]}" class="${TAB===t[0]?'on':''}"><i>${t[0]==='profile'?(PROF.pic?`<img src="${PROF.pic}" style="width:22px;height:22px;border-radius:50%;object-fit:cover;display:block" alt="">`:'☻'):t[1]}</i>${esc(t[2])}</button>`).join('')}</nav>`+(TOASTS.length?`<div class="toasts">${TOASTS.map(t=>`<div class="toast">${esc(t)}</div>`).join('')}</div>`:'');
 }
 
 // ================= LIVE QUOTES (fast Kalshi price loop) =================
@@ -1445,6 +1478,10 @@ document.addEventListener('click',e=>{
   if(b.dataset.cjump){const a=document.getElementById('cslip');if(a)a.scrollIntoView({behavior:'smooth',block:'start'});return}
   if(b.dataset.capply){applyCombo();return}
   if(b.dataset.crate){CNOTE=[];submitCombo();return}
+  if(b.dataset.tilt){PROF.tilt=b.dataset.tilt;applyTilt();saveProf();LAST='';render();return}
+  if(b.dataset.ppic==='clear'){PROF.pic='';saveProf();render();return}
+  if(b.dataset.sl==='on'){linkSleeper((document.getElementById('slu')||{}).value);return}
+  if(b.dataset.sl==='off'){PROF.sl=null;SLST={busy:false,err:'',leagues:null};saveProf();render();return}
   if(b.dataset.rsub){RSUB=b.dataset.rsub;render();return}
   if(b.dataset.msport){MSPORT=b.dataset.msport;MGRP='player';MCAT='';MQ='';render();if(MSPORT!=='nba'&&!(MKTX[MSPORT]&&MKTX[MSPORT].loaded))pollSport(MSPORT);return}
   if(b.dataset.mgrp){MGRP=b.dataset.mgrp;MCAT='';render();return}
@@ -1479,7 +1516,8 @@ document.addEventListener('click',e=>{const t=e.target.closest&&e.target.closest
   let n=v==='custom'?parseFloat((document.getElementById('tgtc')||{}).value):+v;if(!(n>=1.5))return;n=Math.min(500,n);TARGET=n;PICKING=false;try{localStorage.setItem('pt-target',String(n))}catch(x){}render()});
 document.addEventListener('pointerdown',e=>{if(e.target.dataset&&e.target.dataset.pslide!==undefined)SLIDING=true});
 ['pointerup','pointercancel','touchend'].forEach(ev=>document.addEventListener(ev,()=>{setTimeout(()=>{SLIDING=false},400)}));
-document.addEventListener('input',e=>{if(e.target.dataset&&e.target.dataset.pslide!==undefined){const id=+e.target.dataset.pslide,G=PG[id];if(G){SEL[G.sk]=+e.target.value;const d=document.getElementById('pd'+id);if(d)d.innerHTML=pgDyn(id);LAST=''}return}
+document.addEventListener('change',async e=>{if(e.target.id==='pfile'&&e.target.files[0]){try{PROF.pic=await picResize(e.target.files[0]);saveProf();render()}catch(x){}}});
+document.addEventListener('input',e=>{if(e.target.id==='pname'){PROF.name=e.target.value;saveProf();return}if(e.target.dataset&&e.target.dataset.pslide!==undefined){const id=+e.target.dataset.pslide,G=PG[id];if(G){SEL[G.sk]=+e.target.value;const d=document.getElementById('pd'+id);if(d)d.innerHTML=pgDyn(id);LAST=''}return}
 if(e.target.id==='mq'){MQ=e.target.value;const l=document.getElementById('mlist');if(l)l.innerHTML=mlistHTML();LAST='';return}
 if(e.target.id==='bank'){const v=parseFloat(e.target.value);if(v>0){BANK=v;try{localStorage.setItem('pt-bank',String(v))}catch(x){}}return}
 if(e.target.id==='tgtr'){let v=1.5*Math.pow(100/1.5,e.target.value/100);v=v<10?Math.round(v*2)/2:Math.round(v);TARGET=v;const l=document.getElementById('tgtv');if(l)l.textContent=v+'x';try{localStorage.setItem('pt-target',String(v))}catch(x){}return}
