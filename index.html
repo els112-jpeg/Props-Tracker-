@@ -394,9 +394,9 @@ function tick(){
 }
 
 // ================= GENERIC FUNCTION CALL =================
-async function callFn(action){
+async function callFn(action,extra){
   const t=await token();if(!t)throw new Error('Not signed in');
-  const r=await fetch(SB+'/functions/v1/'+(action==='markets'?'kalshi-board':'kalshi-positions'),{method:'POST',headers:{Authorization:'Bearer '+t,apikey:ANON,'Content-Type':'application/json'},body:JSON.stringify({action})});
+  const r=await fetch(SB+'/functions/v1/'+(action==='markets'?'kalshi-board':'kalshi-positions'),{method:'POST',headers:{Authorization:'Bearer '+t,apikey:ANON,'Content-Type':'application/json'},body:JSON.stringify(Object.assign({action},extra||{}))});
   const d=await r.json().catch(()=>({}));
   if(r.status===401){AUTH=null;saveAuth();LAST='';render();throw new Error('Signed out')}
   if(!r.ok||d.error)throw new Error(d.error||('HTTP '+r.status));
@@ -1015,38 +1015,70 @@ function histHTML(){
 let RSUB='history',MGRP='player',MCAT='',MQ='';
 const CATS={KXNBAPTS:['player','Points'],KXNBAREB:['player','Rebounds'],KXNBAAST:['player','Assists'],KXNBAPRA:['player','PRA'],KXNBA3PT:['player','3-Pointers'],KXNBASTL:['player','Steals'],KXNBABLK:['player','Blocks'],KXNBAGAME:['game','Winner'],KXNBASPREAD:['game','Spread'],KXNBATOTAL:['game','Total']};
 function recordHTML(){return `<div class="filters" style="margin-top:0">${[['history','Past bets'],['stats','Success rate']].map(f=>`<button class="chip ${RSUB===f[0]?'on':''}" data-rsub="${f[0]}">${f[1]}</button>`).join('')}</div>`+(RSUB==='stats'?statsHTML():histHTML())}
+let MSPORT='nba',MKTX={};
+const SPORTL=[['nba','NBA'],['nfl','NFL'],['ncaaf','NCAAF'],['mlb','MLB'],['nhl','NHL'],['mls','MLS']];
+const PLAYERCAT={PTS:'Points',REB:'Rebounds',AST:'Assists',PRA:'PRA','3PT':'3-Pointers',STL:'Steals',BLK:'Blocks',PASSYDS:'Passing yds',RECYDS:'Receiving yds',RUSHYDS:'Rushing yds'};
+function evG(ev){const m=/^(KX[A-Z0-9]+)-(\d{2})([A-Z]{3})(\d{2})(\d{4})?([A-Z]+)$/.exec(ev);if(!m)return null;return {series:m[1],date:'20'+m[2]+(MON[m[3]]||'01')+m[4],teams:m[6]}}
+function catOf(series){
+  const k=series.replace(/^KX(NBA|NFL|NCAAF|MLB|NHL|MLS)/,'');
+  if(k==='GAME')return ['game','Winner'];if(k==='SPREAD')return ['game','Spread'];if(k==='TOTAL')return ['game','Total'];
+  return ['player',PLAYERCAT[k]||k];
+}
+async function pollSport(sp){
+  if(sp==='nba'||!AUTH)return;const X=MKTX[sp]||(MKTX[sp]={loaded:false,ok:false,err:'',list:[],at:0});
+  try{const d=await callFn('markets',{sport:sp});X.list=d.markets||[];X.ok=true;X.err=''}catch(e){X.ok=false;X.err=String(e.message||e)}
+  X.loaded=true;X.at=Date.now();if(TAB==='markets'&&MSPORT===sp)render();
+}
+function curMkt(){return MSPORT==='nba'?MKT:(MKTX[MSPORT]||{loaded:false,ok:false,err:'',list:[]})}
 function mktRows(){
   const td=new Date().toLocaleDateString('en-CA',{timeZone:'America/Chicago'}).replace(/-/g,'');
-  return MKT.list.map(m=>{const ev=m.event_ticker||String(m.ticker).split('-').slice(0,2).join('-'),pe=parseEv(ev),c=CATS[pe.series];
-    if(!c||!pe.date||pe.date<td)return null;return {m,pe,grp:c[0],cat:c[1],ev}}).filter(Boolean);
+  return curMkt().list.map(m=>{const ev=m.event_ticker||String(m.ticker).split('-').slice(0,2).join('-'),pe=evG(ev);
+    if(!pe||pe.date<td)return null;const c=catOf(pe.series);return {m,pe,grp:c[0],cat:c[1],ev}}).filter(Boolean);
+}
+function evTitle(g){
+  const w=g.rows.filter(x=>x.r.cat==='Winner'&&!/^tie/i.test(x.label)).map(x=>x.label);
+  if(w.length>=2)return w.slice(0,2).join(' vs ');
+  const t=g.pe.teams;return t.length===6?t.slice(0,3)+' @ '+t.slice(3):t;
 }
 function mlistHTML(){
   const rows=mktRows().filter(r=>r.grp===MGRP&&(!MCAT||r.cat===MCAT));const q=norm(MQ);
-  const by={};rows.forEach(r=>{const p=r.grp==='player'?parseMkt(r.m):null;const label=r.grp==='player'?(p?p.name:r.m.yes_sub_title):(r.m.yes_sub_title||r.m.title);
-    if(q&&!norm(label+' '+r.pe.away+' '+r.pe.home).includes(q))return;(by[r.ev]||(by[r.ev]={pe:r.pe,rows:[]})).rows.push({r,p,label})});
-  const evs=Object.entries(by).sort((a,b)=>a[1].pe.date.localeCompare(b[1].pe.date)||a[0].localeCompare(b[0]));
-  if(!evs.length)return emptyCard('Nothing open here','No open '+(MCAT||MGRP)+' markets match. Check back closer to tip-off.');
+  const by={};
+  mktRows().filter(r=>r.cat==='Winner').forEach(r=>{(by[r.ev]||(by[r.ev]={pe:r.pe,rows:[],win:[]})).win.push(r.m.yes_sub_title||r.m.title)});
+  const nba=MSPORT==='nba';
+  const grp={};
+  rows.forEach(r=>{let p=null,label;
+    if(r.grp==='player'){const mm=/^(.+?):\s*(\d+(?:\.\d+)?)\+/.exec(String(r.m.yes_sub_title||''));if(mm)p={name:mm[1].trim(),thr:+mm[2]};label=p?p.name:(r.m.yes_sub_title||r.m.title)}
+    else label=r.m.yes_sub_title||r.m.title;
+    const g=grp[r.ev]||(grp[r.ev]={pe:r.pe,rows:[],ev:r.ev});g.rows.push({r,p,label})});
+  Object.values(grp).forEach(g=>{if(q)g.rows=g.rows.filter(x=>norm(x.label+' '+g.pe.teams).includes(q))});
+  const evs=Object.values(grp).filter(g=>g.rows.length).sort((a,b)=>a.pe.date.localeCompare(b.pe.date)||a.ev.localeCompare(b.ev));
+  if(!evs.length)return emptyCard('Nothing open here','No open '+(MCAT||MGRP)+' markets match. Check back closer to game time.');
   let h='',shown=0;
-  for(const [ev,g] of evs){if(shown>=160){h+=`<div class="note">Showing the first 160 markets. Use search to narrow.</div>`;break}
-    h+=`<div class="gh" style="margin-top:12px"><div class="gt"><span>${g.pe.away} @ ${g.pe.home}</span><span class="mut" style="font-size:11px;font-weight:600">${fdate(g.pe.date.slice(0,4)+'-'+g.pe.date.slice(4,6)+'-'+g.pe.date.slice(6,8)+'T12:00:00Z')}</span></div>`;
+  for(const g of evs){if(shown>=160){h+=`<div class="note">Showing the first 160 markets. Use search to narrow.</div>`;break}
+    const wl=(by[g.ev]&&by[g.ev].win||[]).filter(x=>!/^tie/i.test(x));
+    const title=wl.length>=2?wl.slice(0,2).join(' vs '):(g.pe.teams.length===6?g.pe.teams.slice(0,3)+' @ '+g.pe.teams.slice(3):g.pe.teams);
+    h+=`<div class="gh" style="margin-top:12px"><div class="gt"><span>${esc(title)}</span><span class="mut" style="font-size:11px;font-weight:600">${fdate(g.pe.date.slice(0,4)+'-'+g.pe.date.slice(4,6)+'-'+g.pe.date.slice(6,8)+'T12:00:00Z')}</span></div>`;
     g.rows.sort((a,b)=>String(a.label).localeCompare(String(b.label))||(a.p&&b.p?a.p.thr-b.p.thr:0)||(a.r.m.floor_strike||0)-(b.r.m.floor_strike||0));
-    for(const x of g.rows.slice(0,40)){shown++;const y=yesProb(x.r.m);let right=Math.round(y*100)+'¢',sub=x.r.cat,brain='';
-      if(x.p){sub=x.p.thr+'+ '+x.r.cat;if(x.p.stat){const rk=riskFor(x.p,y);if(rk){const e=rk.blend-y,col=e>=MINEDGE?'var(--lm)':e<=-MINEDGE?'var(--rd)':'var(--mut)';brain=`<span style="color:${col};font-weight:700;font-size:12px">Brain ${Math.round(rk.blend*100)}%${rk.inj?' ⚠':''}</span>`}}}
-      h+=`<div class="lg"><span style="min-width:0"><b style="margin:0;font-weight:600">${esc(x.label)}</b> <span class="mut" style="font-size:12px">${esc(x.p?sub:(x.r.cat==='Winner'?'to win':''))}</span></span><span style="margin-left:auto;display:flex;gap:10px;align-items:center">${brain}<b style="margin:0">YES ${right}</b></span></div>`}
+    for(const x of g.rows.slice(0,40)){shown++;const y=yesProb(x.r.m);let sub='';let brain='';
+      if(x.p){sub=x.p.thr+'+ '+x.r.cat;if(nba){const pm=parseMkt(x.r.m);if(pm&&pm.stat){const rk=riskFor(pm,y);if(rk){const e=rk.blend-y,col=e>=MINEDGE?'var(--lm)':e<=-MINEDGE?'var(--rd)':'var(--mut)';brain=`<span style="color:${col};font-weight:700;font-size:12px">Brain ${Math.round(rk.blend*100)}%${rk.inj?' ⚠':''}</span>`}}}}
+      else if(x.r.cat==='Winner')sub='to win';
+      h+=`<div class="lg"><span style="min-width:0"><b style="margin:0;font-weight:600">${esc(x.label)}</b> <span class="mut" style="font-size:12px">${esc(sub)}</span></span><span style="margin-left:auto;display:flex;gap:10px;align-items:center">${brain}<b style="margin:0">YES ${Math.round(y*100)}¢</b></span></div>`}
     h+=`</div>`}
   return h;
 }
 function marketsHTML(){
-  let h=`<div class="sec">Kalshi markets</div>`;
-  if(!MKT.loaded)return h+emptyCard('Loading markets…','Reading the Kalshi board');
-  if(!MKT.ok&&!MKT.list.length)return h+emptyCard("Can't load markets",`<span style="color:var(--or)">${esc(MKT.err)}</span>`);
+  let h=`<div class="sec">Kalshi markets</div><div class="filters" style="margin-top:0">${SPORTL.map(f=>`<button class="chip ${MSPORT===f[0]?'on':''}" data-msport="${f[0]}">${f[1]}</button>`).join('')}</div>`;
+  const C=curMkt();
+  if(!C.loaded)return h+emptyCard('Loading markets…','Reading the Kalshi board');
+  if(!C.ok&&!C.list.length)return h+emptyCard("Can't load markets",`<span style="color:var(--or)">${esc(C.err)}</span>`);
   const rows=mktRows(),cats=g=>[...new Set(rows.filter(r=>r.grp===g).map(r=>r.cat))];
-  const order={Points:1,Rebounds:2,Assists:3,PRA:4,'3-Pointers':5,Steals:6,Blocks:7,Winner:1,Spread:2,Total:3};
+  const order={Points:1,Rebounds:2,Assists:3,PRA:4,'3-Pointers':5,Steals:6,Blocks:7,'Passing yds':1,'Receiving yds':2,'Rushing yds':3,Winner:1,Spread:2,Total:3};
+  if(MGRP==='player'&&!cats('player').length&&cats('game').length)MGRP='game';
   const cl=cats(MGRP).sort((a,b)=>(order[a]||9)-(order[b]||9));if(MCAT&&!cl.includes(MCAT))MCAT='';
   h+=`<div class="filters" style="margin-top:0">${[['player','Player props'],['game','Game props']].map(f=>`<button class="chip ${MGRP===f[0]?'on':''}" data-mgrp="${f[0]}">${f[1]}</button>`).join('')}</div>`;
   h+=`<div class="filters" style="margin-top:0"><button class="chip ${MCAT?'':'on'}" data-mcat="">All</button>${cl.map(c=>`<button class="chip ${MCAT===c?'on':''}" data-mcat="${c}">${c}</button>`).join('')}</div>`;
   h+=`<input id="mq" class="fld" style="margin:6px 0 0" placeholder="Search player or team" value="${esc(MQ)}">`;
-  h+=`<div id="mlist">${mlistHTML()}</div><div class="note">Prices are Kalshi's current YES price. "Brain" is the model's estimate for player points, rebounds, assists and PRA only. Green means it is 4+ pts above the price. Game props show prices only.</div>`;
+  h+=`<div id="mlist">${mlistHTML()}</div><div class="note">Prices are Kalshi's current YES price. ${MSPORT==='nba'?'"Brain" is the model\'s estimate for player points, rebounds, assists and PRA only. Green means it is 4+ pts above the price.':'The Brain only models NBA player props, so other sports show prices only.'}</div>`;
   return h;
 }
 function statsHTML(){
@@ -1241,6 +1273,7 @@ function navHTML(){
 document.addEventListener('click',e=>{
   const b=e.target.closest('button');if(!b)return;
   if(b.dataset.rsub){RSUB=b.dataset.rsub;render();return}
+  if(b.dataset.msport){MSPORT=b.dataset.msport;MGRP='player';MCAT='';MQ='';render();if(MSPORT!=='nba'&&!(MKTX[MSPORT]&&MKTX[MSPORT].loaded))pollSport(MSPORT);return}
   if(b.dataset.mgrp){MGRP=b.dataset.mgrp;MCAT='';render();return}
   if(b.dataset.mcat!==undefined&&b.classList.contains('chip')&&!b.dataset.tab){MCAT=b.dataset.mcat;render();return}
   if(b.dataset.bt){try{runBacktest()}catch(e){}render();return}
@@ -1264,7 +1297,7 @@ render();
 setInterval(tick,1000);
 if(AUTH){pollPos();pollHist();pollMkts()}
 setInterval(pollPos,5000);setInterval(pollHist,60000);setInterval(pollMkts,30000);
-setInterval(pollEspn,1000);
+setInterval(pollEspn,1000);setInterval(()=>{if(TAB==='markets'&&MSPORT!=='nba')pollSport(MSPORT)},60000);
 document.addEventListener('click',e=>{const l=e.target.closest&&e.target.closest('[data-log]');if(!l)return;const i=+l.dataset.log;OPENLOG=OPENLOG===i?-1:i;render()});
 document.addEventListener('change',e=>{if(e.target.id==='tgtr'||e.target.id==='bank')render()});
 document.addEventListener('click',e=>{const t=e.target.closest&&e.target.closest('[data-slip],[data-tgt]');if(!t)return;

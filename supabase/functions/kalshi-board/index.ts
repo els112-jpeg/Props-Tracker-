@@ -1,7 +1,14 @@
 import { createClient } from "jsr:@supabase/supabase-js@2";
 const CORS={"Access-Control-Allow-Origin":"*","Access-Control-Allow-Headers":"authorization, x-client-info, apikey, content-type","Access-Control-Allow-Methods":"POST, OPTIONS"};
 const json=(b:unknown,s=200)=>new Response(JSON.stringify(b),{status:s,headers:{...CORS,"Content-Type":"application/json"}});
-const SERIES=["KXNBAPRA","KXNBAPTS","KXNBAREB","KXNBAAST","KXNBA3PT","KXNBASTL","KXNBABLK","KXNBAGAME","KXNBASPREAD","KXNBATOTAL"];
+const SPORTS:Record<string,string[]>={
+  nba:["KXNBAPRA","KXNBAPTS","KXNBAREB","KXNBAAST","KXNBA3PT","KXNBASTL","KXNBABLK","KXNBAGAME","KXNBASPREAD","KXNBATOTAL"],
+  nfl:["KXNFLGAME","KXNFLSPREAD","KXNFLTOTAL","KXNFLPASSYDS","KXNFLRECYDS","KXNFLRUSHYDS"],
+  ncaaf:["KXNCAAFGAME","KXNCAAFSPREAD","KXNCAAFTOTAL"],
+  mlb:["KXMLBGAME","KXMLBSPREAD","KXMLBTOTAL"],
+  nhl:["KXNHLGAME","KXNHLSPREAD","KXNHLTOTAL"],
+  mls:["KXMLSGAME","KXMLSSPREAD","KXMLSTOTAL"],
+};
 const slim=(m:any)=>({ticker:m.ticker,event_ticker:m.event_ticker,title:m.title,yes_sub_title:m.yes_sub_title,
   yes_bid_dollars:m.yes_bid_dollars,yes_ask_dollars:m.yes_ask_dollars,no_bid_dollars:m.no_bid_dollars,no_ask_dollars:m.no_ask_dollars,
   last_price_dollars:m.last_price_dollars,yes_bid:m.yes_bid,yes_ask:m.yes_ask,last_price:m.last_price,
@@ -24,7 +31,8 @@ Deno.serve(async(req)=>{
     if(!user)return json({error:"Not signed in"},401);
     const allowed=(Deno.env.get("ALLOWED_EMAILS")||"").split(",").map(s=>s.trim().toLowerCase()).filter(Boolean);
     if(!allowed.length||!allowed.includes((user.email||"").toLowerCase()))return json({error:"Not allowed"},403);
-    const parts=await Promise.all(SERIES.map(series));
+    const b=await req.json().catch(()=>({}));const list=SPORTS[String(b.sport||"nba")]||SPORTS.nba;
+    const parts=await Promise.all(list.map(series));
     return json({markets:parts.flat(),at:Date.now()});
   }catch(e){return json({error:String((e as Error).message||e)},500)}
 });
