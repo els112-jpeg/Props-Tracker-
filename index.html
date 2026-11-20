@@ -124,6 +124,10 @@ canvas#tree:active{cursor:grabbing}
 .sub{margin-top:6px;padding:9px 12px;border-radius:14px;background:rgba(255,255,255,.55);border:1px solid var(--ln);display:flex;align-items:center;gap:10px;cursor:pointer;font-size:14px}
 .sub .v{margin-left:auto;font-weight:700}
 @media (prefers-reduced-motion:reduce){.live,.leg.danger{animation:none!important}}
+input[type=range]{-webkit-appearance:none;appearance:none;height:8px;border-radius:999px;background:linear-gradient(90deg,#2563eb,#7c3aed);outline:none}
+input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:28px;height:28px;border-radius:50%;background:#fff;border:2px solid #fff;box-shadow:0 4px 14px rgba(79,70,229,.5)}
+input[type=range]::-moz-range-thumb{width:26px;height:26px;border-radius:50%;background:#fff;border:0;box-shadow:0 4px 14px rgba(79,70,229,.5)}
+.btn:disabled{opacity:.6}
 </style>
 </head>
 <body>
@@ -938,11 +942,11 @@ function statsHTML(){
   else h+=`<div class="sec">Most correct · teams</div><div class="panel mut">${TEAMSTATE==='failed'?'Team lookup unavailable right now':'Matching players to teams…'}</div>`;
   return h;
 }
-let TARGET=null,PICKING=false;try{TARGET=+localStorage.getItem('pt-target')||null}catch(e){}
+let TARGET=null,PICKING=false,AIOPEN=false;try{TARGET=+localStorage.getItem('pt-target')||null}catch(e){}
 const payOf=x=>1/Math.max(.03,x.mkt||x.chance);
 function buildSlip(T){
   const seen=new Set(),pool=[];
-  [...picks().filter(x=>!x.held).sort((a,b)=>b.rank-a.rank).slice(0,16),...swings().slice(0,8)].forEach(x=>{const k=x.p.m.ticker+x.side;if(!seen.has(k)&&x.mkt>.04){seen.add(k);pool.push(x)}});
+  [...picks().filter(x=>!x.held).sort((a,b)=>b.rank-a.rank).slice(0,22),...swings().slice(0,10)].forEach(x=>{const k=x.p.m.ticker+x.side;if(!seen.has(k)&&x.mkt>.04){seen.add(k);pool.push(x)}});
   let best=null,fallback=null;
   const go=(start,cur,ev,pl,pr,pay)=>{
     if(cur.length>=2){
@@ -1002,7 +1006,8 @@ function parlaysHTML(){
     if(sp.length>=2){const pr=sp.reduce((a,x)=>a*x.chance,1),pay=sp.reduce((a,x)=>a*x.payout,1);
       h+=`<div class="gh" style="margin-bottom:12px"><div class="gt">Brain swing parlay · ${sp.length} legs</div><div class="wp" style="margin-top:6px">${sp.map(x=>esc(x.p.name)+' '+x.side.toUpperCase()+' '+x.p.thr+'+').join(' · ')}</div><div class="wp" style="margin-top:6px;color:var(--or)">Hits ~${(pr*100).toFixed(0)}% of the time · pays ~${pay.toFixed(0)}x · you lose most of these, so size small</div></div>`}
   }else if(RISKSTATE.busy){h+=`<div class="note">Risk Lab is loading player logs (${RISKSTATE.done}/${RISKSTATE.total})…</div>`}
-  h+=`<div class="sec" style="margin-top:14px">Ask the AI Brain</div><button data-ai="parlay" class="btn" style="width:100%">${AI.busy?'Thinking…':'🧠 Have the AI build my parlay'}</button>${AI.err?`<div class="note" style="color:var(--or);margin-top:8px">${esc(AI.err)}</div>`:''}${AI.text?`<div class="panel" style="margin-top:8px;padding:10px;white-space:pre-wrap;font-size:14px;line-height:1.45">${esc(AI.text)}</div>`:''}`;
+  {const T=TARGET||3,pos=Math.round(Math.log(T/1.5)/Math.log(100/1.5)*100);
+  h+=`<div class="sec" style="margin-top:14px">Ask the AI Brain</div>`+(AIOPEN?`<div class="panel"><div class="row"><b>Target multiplier</b><b id="tgtv" style="font-size:22px;color:var(--cy)">${T}x</b></div><input id="tgtr" type="range" min="0" max="100" value="${pos}" style="width:100%;margin:12px 0 2px"><div class="row mut" style="font-size:11px"><span>1.5x safer</span><span>100x longshot</span></div><button data-ai="parlay" class="btn pri" style="width:100%;margin-top:12px" ${AI.busy?'disabled':''}>${AI.busy?'Hunting for the best parlay…':'🧠 Build me a parlay'}</button><div class="note" style="margin-top:8px">It searches every open prop for the highest-chance combo near your target, updates the slip at the top, and the AI explains it below.</div></div>`:`<button data-aiopen="1" class="btn pri" style="width:100%">🧠 Have the AI build my parlay</button>`)+`${AI.err?`<div class="note" style="color:var(--rd);margin-top:8px">${esc(AI.err)}</div>`:''}${AI.text?`<div class="panel" style="margin-top:8px;white-space:pre-wrap;font-size:14px;line-height:1.5">${esc(AI.text)}</div>`:''}`}
   return h;
 }
 function picksHTML(){
@@ -1074,6 +1079,7 @@ function navHTML(){
 // ================= EVENTS =================
 document.addEventListener('click',e=>{
   const b=e.target.closest('button');if(!b)return;
+  if(b.dataset.aiopen){AIOPEN=true;render();return}
   if(b.dataset.scan){doScan();return}
   if(b.dataset.treereset){TREE.yaw=.6;TREE.pitch=-.25;TREE.zoom=1;TREE.vy=TREE.vp=0;return}
   if(b.dataset.zoom){TREE.zoom=Math.max(.7,Math.min(2.2,TREE.zoom*(b.dataset.zoom==='1'?1.2:.83)));return}
@@ -1094,11 +1100,13 @@ setInterval(tick,1000);
 if(AUTH){pollPos();pollHist();pollMkts()}
 setInterval(pollPos,5000);setInterval(pollHist,60000);setInterval(pollMkts,30000);
 setInterval(pollEspn,1000);
+document.addEventListener('change',e=>{if(e.target.id==='tgtr')render()});
 document.addEventListener('click',e=>{const t=e.target.closest&&e.target.closest('[data-slip],[data-tgt]');if(!t)return;
   if(t.dataset.slip){PICKING=true;render();return}
   const v=t.dataset.tgt;if(v==='cancel'){PICKING=false;render();return}
   let n=v==='custom'?parseFloat((document.getElementById('tgtc')||{}).value):+v;if(!(n>=1.5))return;n=Math.min(500,n);TARGET=n;PICKING=false;try{localStorage.setItem('pt-target',String(n))}catch(x){}render()});
-document.addEventListener('input',e=>{if(e.target.id==='aiq')AI.q=e.target.value});
+document.addEventListener('input',e=>{if(e.target.id==='tgtr'){let v=1.5*Math.pow(100/1.5,e.target.value/100);v=v<10?Math.round(v*2)/2:Math.round(v);TARGET=v;const l=document.getElementById('tgtv');if(l)l.textContent=v+'x';try{localStorage.setItem('pt-target',String(v))}catch(x){}return}
+if(e.target.id==='aiq')AI.q=e.target.value});
 document.addEventListener('click',e=>{var b=e.target.closest&&e.target.closest('[data-ai]');if(b){if(b.dataset.ai==='parlay')AI.q='Build me ONE parlay aiming for about '+(TARGET||3)+'x payout, using the slip in the data as a starting point (you may swap legs). One leg per game. For each leg say why it fits my habits and risk, give the combined hit chance, and tell me honestly if that target is realistic or if I should skip.';askBrain()}});
 </script>
 </body>
