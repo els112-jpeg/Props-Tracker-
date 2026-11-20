@@ -413,12 +413,13 @@ async function callFn(action,extra){
 }
 
 let LOG=[],OPENLOG=-1;try{LOG=JSON.parse(localStorage.getItem('pt-ailog')||'[]')}catch(e){}
+function brainBody(qq){return {question:qq,stats:S,skills:nodeList().filter(b=>b.learned).map(b=>({skill:b.name,parent:b.parent,level:b.level,notes:b.ins.lines,lift_pts:b.met?Math.round(b.met.lift*100):null,legs:b.met?b.met.n:null,share_of_wins:b.met?Math.round(b.met.share*100):null})),picks:picks().filter(x=>!x.held).sort((a,b)=>b.rank-a.rank).slice(0,12).map(x=>({player:x.p.name,side:x.side,line:x.p.thr+'+',stat:KEYOF(x.p.stat),game:x.p.away+'@'+x.p.home,brain_pct:Math.round(x.chance*100),market_pct:Math.round(x.mkt*100),habit_fit:Math.round(x.fit*100),risk:x.risk?{state:x.risk.state,l5_avg:+x.risk.l5avg.toFixed(1),season_avg:+x.risk.savg.toFixed(1),l10:x.risk.l10,vs_opp:x.risk.oppN?x.risk.oppH+'/'+x.risk.oppN:null,volatility:x.risk.vol}:null})),swings:swings().slice(0,5).map(x=>({player:x.p.name,side:x.side,line:x.p.thr+'+',brain_pct:Math.round(x.chance*100),market_pct:Math.round(x.mkt*100),pays:+x.payout.toFixed(1)})),calibration:calib(),discipline:(()=>{const pl=plan();return {tilt:PROF.tilt,bankroll:BANK,plan:{bets:pl.bets.map(b=>({player:b.x.p.name,side:b.x.side,line:b.x.p.thr+'+',stake:+b.st.toFixed(2),edge_pts:Math.round((b.x.chance-b.x.mkt)*100)})),total_risk:+pl.tot.toFixed(2),daily_cap:+pl.day.toFixed(2),passed:pl.pass,waiting:pl.wait},backtest:BT&&!BT.short?{games:BT.n,model_error:+BT.model.toFixed(3),season_rate_error:+BT.base.toFixed(3),streak_adj:ADJ.streak,opp_adj:ADJ.opp}:null,price_tracking:clvStats(),injuries_listed:Object.keys(INJ).length}})(),target_multiplier:TARGET||3,slip:(()=>{const sl=buildSlip(TARGET||3);return sl?{hit_pct:Math.round(sl.pr*100),pays:+sl.pay.toFixed(1),legs:sl.legs.map(x=>({player:x.p.name,side:x.side,line:x.p.thr+'+',stat:KEYOF(x.p.stat),brain_pct:Math.round(x.chance*100),market_pct:Math.round(x.mkt*100)}))}:null})()}}
 async function askBrain(qq,kind){
   qq=qq==null?'':qq;kind=kind||(qq?'ask':'read');
   if(AI.busy)return;AI.busy=true;AI.err='';render();
   try{
     const t=await token();if(!t)throw new Error('Not signed in');
-    const body={question:qq,stats:S,skills:nodeList().filter(b=>b.learned).map(b=>({skill:b.name,parent:b.parent,level:b.level,notes:b.ins.lines,lift_pts:b.met?Math.round(b.met.lift*100):null,legs:b.met?b.met.n:null,share_of_wins:b.met?Math.round(b.met.share*100):null})),picks:picks().filter(x=>!x.held).sort((a,b)=>b.rank-a.rank).slice(0,12).map(x=>({player:x.p.name,side:x.side,line:x.p.thr+'+',stat:KEYOF(x.p.stat),game:x.p.away+'@'+x.p.home,brain_pct:Math.round(x.chance*100),market_pct:Math.round(x.mkt*100),habit_fit:Math.round(x.fit*100),risk:x.risk?{state:x.risk.state,l5_avg:+x.risk.l5avg.toFixed(1),season_avg:+x.risk.savg.toFixed(1),l10:x.risk.l10,vs_opp:x.risk.oppN?x.risk.oppH+'/'+x.risk.oppN:null,volatility:x.risk.vol}:null})),swings:swings().slice(0,5).map(x=>({player:x.p.name,side:x.side,line:x.p.thr+'+',brain_pct:Math.round(x.chance*100),market_pct:Math.round(x.mkt*100),pays:+x.payout.toFixed(1)})),calibration:calib(),discipline:(()=>{const pl=plan();return {tilt:PROF.tilt,bankroll:BANK,plan:{bets:pl.bets.map(b=>({player:b.x.p.name,side:b.x.side,line:b.x.p.thr+'+',stake:+b.st.toFixed(2),edge_pts:Math.round((b.x.chance-b.x.mkt)*100)})),total_risk:+pl.tot.toFixed(2),daily_cap:+pl.day.toFixed(2),passed:pl.pass,waiting:pl.wait},backtest:BT&&!BT.short?{games:BT.n,model_error:+BT.model.toFixed(3),season_rate_error:+BT.base.toFixed(3),streak_adj:ADJ.streak,opp_adj:ADJ.opp}:null,price_tracking:clvStats(),injuries_listed:Object.keys(INJ).length}})(),target_multiplier:TARGET||3,slip:(()=>{const sl=buildSlip(TARGET||3);return sl?{hit_pct:Math.round(sl.pr*100),pays:+sl.pay.toFixed(1),legs:sl.legs.map(x=>({player:x.p.name,side:x.side,line:x.p.thr+'+',stat:KEYOF(x.p.stat),brain_pct:Math.round(x.chance*100),market_pct:Math.round(x.mkt*100)}))}:null})()};
+    const body=brainBody(qq);body.use_researcher=RUSE;
     if(kind==='combo'){body.combo=CPAY;body.slip=null}
     const r=await fetch(SB+'/functions/v1/brain-ai',{method:'POST',headers:{Authorization:'Bearer '+t,apikey:ANON,'Content-Type':'application/json'},body:JSON.stringify(body)});
     const d=await r.json().catch(()=>({}));
@@ -577,7 +578,7 @@ async function dbCall(method,path,body,prefer){
   const t=await token();if(!t)throw new Error('no token');
   const r=await fetch(SB+'/rest/v1/'+path,{method,headers:Object.assign({apikey:ANON,Authorization:'Bearer '+t,'Content-Type':'application/json'},prefer?{Prefer:prefer}:{}),body:body?JSON.stringify(body):undefined});
   if(!r.ok)throw new Error('db '+r.status);
-  return r.status===204?null:r.json();
+  return r.status===204?null:r.text().then(x=>x?JSON.parse(x):null);
 }
 let LOCALDB={};try{LOCALDB=JSON.parse(localStorage.getItem('pt-brain')||'{}')}catch(e){}
 let SEEN={};try{SEEN=JSON.parse(localStorage.getItem('pt-seen')||'{}')}catch(e){}
@@ -1347,7 +1348,119 @@ function picksHTML(){
 }
 function treeSkillRow(n,col){const m=n.met,par=n.parent?(SKILLS.find(s=>s.id===n.parent)||{}).name:'Main skill';
   return `<div class="rank" data-skill="${n.id}"><div class="g" style="background:${col}">${n.glyph}</div><div style="min-width:0"><div class="nm">${esc(n.name)}</div><div class="ln">${esc(par)}</div></div><div class="v" style="color:${col}">${sgn(m.lift)}<small>${m.h}/${m.n} legs · ${Math.round(m.share*100)}% of your wins</small></div></div>`}
-function brainHTML(){
+// ================= RESEARCHER BOT =================
+let BV='main';try{BV=localStorage.getItem('pt-bv')==='researcher'?'researcher':'main'}catch(e){}
+let RUSE=true;try{RUSE=localStorage.getItem('pt-ruse')!=='0'}catch(e){}
+let RB={loaded:false,busy:false,err:'',imp:'',docs:{}},RAI={busy:false,err:'',q:'',res:null},RSIGF='nba',ROPEN={},RLOG=[];
+try{RLOG=JSON.parse(localStorage.getItem('pt-rlog')||'[]')}catch(e){}
+async function loadResearcher(){
+  if(RB.busy)return;RB.busy=true;
+  try{const rows=await dbCall('GET','researcher_brain?select=doc,body,updated_at');RB.docs={};(rows||[]).forEach(r=>RB.docs[r.doc]=r);RB.err=''}catch(e){RB.err=String(e.message||e)}
+  RB.loaded=true;RB.busy=false;LAST='';render();
+}
+async function importResearcher(files){
+  const rows=[],now=new Date().toISOString(),bad=[];
+  for(const f of files){
+    const n=f.name.toLowerCase();let txt='';
+    try{txt=await f.text()}catch(e){bad.push(f.name);continue}
+    try{
+      if(/^research_.*\.json$/.test(n))rows.push({doc:'research',body:JSON.parse(txt),updated_at:now});
+      else if(n==='scorecard.json')rows.push({doc:'scorecard',body:JSON.parse(txt),updated_at:now});
+      else if(n==='predictions.jsonl'||n==='results.jsonl')rows.push({doc:n.split('.')[0],body:{items:txt.split('\n').filter(x=>x.trim()).map(x=>JSON.parse(x))},updated_at:now});
+      else if(n==='skills.md')rows.push({doc:'skills',body:{text:txt},updated_at:now});
+      else if(/^briefing_.*\.md$/.test(n))rows.push({doc:'briefing',body:{text:txt},updated_at:now});
+      else bad.push(f.name);
+    }catch(e){bad.push(f.name)}
+  }
+  RB.err='';
+  if(rows.length){try{await dbCall('POST','researcher_brain?on_conflict=user_id,doc',rows,'resolution=merge-duplicates,return=minimal')}catch(e){RB.err='Import failed: '+(e.message||e)}}
+  RB.imp=rows.length+' file'+(rows.length===1?'':'s')+' imported'+(bad.length?' · skipped '+bad.join(', '):'');
+  RB.busy=false;await loadResearcher();
+}
+async function askResearcher(mode){
+  if(RAI.busy)return;RAI.busy=true;RAI.err='';render();
+  try{
+    const t=await token();if(!t)throw new Error('Not signed in');
+    let body;try{body=brainBody(RAI.q)}catch(e){body={}}
+    body.question=RAI.q;body.mode=mode;
+    const r=await fetch(SB+'/functions/v1/brain-ai',{method:'POST',headers:{Authorization:'Bearer '+t,apikey:ANON,'Content-Type':'application/json'},body:JSON.stringify(body)});
+    const d=await r.json().catch(()=>({}));
+    if(!r.ok||d.error)throw new Error(d.error||('HTTP '+r.status));
+    RAI.res={mode,q:RAI.q,text:d.text||'',researcher:d.researcher||''};
+    RLOG.unshift({at:Date.now(),mode,q:RAI.q,text:d.text||'',researcher:d.researcher||''});RLOG=RLOG.slice(0,20);
+    try{localStorage.setItem('pt-rlog',JSON.stringify(RLOG))}catch(e){}
+  }catch(e){RAI.err=String(e.message||e)}
+  RAI.busy=false;render();
+}
+const RSTAT={confirmed:'var(--lm)',reported:'var(--cy)',conflicting:'var(--or)',rumor:'var(--rd)'};
+function rAgo(iso){if(!iso)return 'unknown';const m=Math.max(0,Math.round((Date.now()-new Date(iso))/60000));return m<60?m+'m ago':m<1440?Math.round(m/60)+'h ago':Math.round(m/1440)+'d ago'}
+function rText(t){return String(t||'').replace(/^\s*TL;?DR:?.*\n?/im,'').trim()}
+function rTldr(t){const m=/^\s*TL;?DR:?\s*(.+)$/im.exec(t||'');return m?m[1].trim():''}
+function rAnswerHTML(x){
+  if(!x)return '';
+  let h=`<div class="panel" style="margin-top:10px">`;
+  if(x.mode==='council'){
+    h+=`<div class="sec" style="margin:0 0 6px">🔬 Researcher says</div><div style="white-space:pre-wrap;font-size:13px;line-height:1.5">${esc(x.researcher||'')}</div><div style="height:1px;background:rgba(100,116,139,.2);margin:12px 0"></div><div class="sec" style="margin:0 0 6px">🧠 Brain answers</div>`;
+  }
+  const tl=rTldr(x.text);
+  h+=(tl?`<div style="font-weight:700;margin-bottom:6px">${esc(tl)}</div>`:'')+`<div style="white-space:pre-wrap;font-size:14px;line-height:1.5">${esc(rText(x.text))}</div><div class="note" style="margin-top:6px">AI opinion built from the Researcher's filed notes. Not a guarantee, not financial advice.</div></div>`;
+  return h;
+}
+function researcherHTML(){
+  if(!RB.loaded){if(!RB.busy)loadResearcher();return `<div class="sec">The Researcher</div>`+emptyCard('Waking the Researcher…','Reading its files')}
+  const D=RB.docs,rs=D.research&&D.research.body,sc=D.scorecard&&D.scorecard.body;
+  const preds=(D.predictions&&D.predictions.body&&D.predictions.body.items)||[],res=(D.results&&D.results.body&&D.results.body.items)||[];
+  const done=new Set(res.map(r=>r.id||r.prediction_id)),open=preds.filter(p=>!done.has(p.id));
+  const sig=(rs&&rs.signals)||[];
+  const today=new Date().toLocaleDateString('en-CA',{timeZone:'America/Chicago'});
+  const graded=(sc&&sc.predictions_graded)||0;
+  let h=`<div class="sec">The Researcher</div><div class="panel"><div class="row"><b style="font-size:15px">🔬 Researcher bot</b><span class="mut" style="font-size:12px">${rs?'run '+esc(rs.run_date||'?')+' · filed '+rAgo(D.research.updated_at):'nothing filed yet'}</span></div>`;
+  h+=`<div class="stats" style="grid-template-columns:repeat(3,minmax(0,1fr))"><div class="stat"><b>${sig.length}</b><span>Signals</span></div><div class="stat"><b>${open.length}</b><span>Open calls</span></div><div class="stat"><b>${graded&&sc.overall&&sc.overall.accuracy!=null?pc(sc.overall.accuracy):'—'}</b><span>Hit rate</span></div></div>`;
+  h+=`<div class="note" style="text-align:left;margin-top:6px">${graded>=20?'Track record: '+graded+' graded calls.':'Track record is unproven ('+graded+' graded calls so far). The Brain treats its notes as outside intel, not fact.'}</div>`;
+  if(rs&&rs.run_date&&rs.run_date<today)h+=`<div class="note" style="text-align:left;color:var(--or)">⚠ Latest notes are from ${esc(rs.run_date)}. Today's run has not been filed yet.</div>`;
+  if(RB.err)h+=`<div class="note" style="text-align:left;color:var(--rd)">${esc(RB.err)}</div>`;
+  h+=`<div style="display:flex;gap:8px;margin-top:10px"><button class="btn" data-rreload="1" style="flex:1">↻ Refresh</button></div></div>`;
+  // talk to the researcher / council
+  h+=`<div class="sec">Talk to the Researcher</div><div class="panel"><input id="raiq" class="fld" style="margin-top:0" value="${esc(RAI.q)}" placeholder="Ask anything, or leave blank for today's read"><div style="display:flex;gap:8px;margin-top:10px"><button data-rask="researcher" class="btn" style="flex:1" ${RAI.busy?'disabled':''}>${RAI.busy?'Thinking…':'🔬 Ask Researcher'}</button><button data-rcouncil="1" class="btn pri" style="flex:1" ${RAI.busy?'disabled':''}>🤝 Council</button></div><div class="note" style="text-align:left;margin-top:8px">Council: the Researcher sends the Brain a memo (boost, avoid, watch). The Brain answers it against your plan and stake caps, and says where they disagree.</div></div>`;
+  if(RAI.err)h+=`<div class="note" style="color:var(--rd);margin-top:8px">${esc(RAI.err)}</div>`;
+  h+=rAnswerHTML(RAI.res);
+  // briefing
+  const bt=D.briefing&&D.briefing.body&&D.briefing.body.text;
+  if(bt){const op=ROPEN.brief;h+=`<div class="sec">Today's briefing</div><div class="panel" data-rtoggle="brief" style="cursor:pointer"><div style="white-space:pre-wrap;font-size:13px;line-height:1.5">${esc(op?bt:bt.slice(0,520)+(bt.length>520?'…':''))}</div><div class="mut" style="font-size:11px;margin-top:6px">${op?'Tap to collapse':'Tap to read all'}</div></div>`}
+  // scorecard
+  h+=`<div class="sec">Self-check · is the Researcher right?</div><div class="panel">`;
+  const bk=sc&&sc.by_confidence_bucket?Object.entries(sc.by_confidence_bucket).filter(e=>e[1]&&e[1].n>0):[];
+  if(graded&&sc.overall){h+=`<div class="stats" style="grid-template-columns:repeat(3,minmax(0,1fr));margin-top:0"><div class="stat"><b>${graded}</b><span>Graded</span></div><div class="stat"><b>${sc.overall.accuracy!=null?pc(sc.overall.accuracy):'—'}</b><span>Hit rate</span></div><div class="stat"><b>${sc.overall.brier_score!=null?(+sc.overall.brier_score).toFixed(3):'—'}</b><span>Brier</span></div></div>`+bk.map(e=>`<div class="barrow"><span class="mut" style="width:62px;font-size:12px">${esc(e[0])}</span><div class="bar sm"><i style="width:${Math.round((e[1].hit_rate||0)*100)}%"></i></div><b>${pc(e[1].hit_rate||0)} <small class="mut">(${e[1].n})</small></b></div>`).join('')}
+  else h+=`<div class="note" style="text-align:left;margin:0">It grades its own calls against final box scores. ${open.length} calls are waiting for results. Nothing is graded yet, so no edge can be claimed.</div>`;
+  h+=`</div>`;
+  // signals
+  const nbaN=sig.filter(s=>s.league==='NBA').length;
+  const list=sig.filter(s=>RSIGF==='all'||s.league==='NBA').sort((a,b)=>(b.confidence||0)-(a.confidence||0)).slice(0,30);
+  h+=`<div class="sec">Signals</div><div class="filters" style="margin-top:0"><button class="chip ${RSIGF==='nba'?'on':''}" data-rsigf="nba">NBA (${nbaN})</button><button class="chip ${RSIGF==='all'?'on':''}" data-rsigf="all">All sports (${sig.length})</button></div>`;
+  if(!list.length)h+=`<div class="note">No signals filed yet.</div>`;
+  list.forEach(s=>{const c=RSTAT[s.status_class]||'var(--mut)',op=ROPEN[s.id];
+    h+=`<div class="rank" data-rsig="${esc(s.id)}" style="display:block"><div class="row"><b style="font-size:14px">${esc(s.player||s.team||'')}</b><span style="font-size:11px;font-weight:700;color:${c}">${esc(s.status_class||'')} · ${Math.round((s.confidence||0)*100)}%</span></div><div class="ln" style="margin-top:4px;font-size:12px">${esc(s.team||'')} · ${esc(String(s.signal_type||'').replace(/_/g,' '))}</div>`+
+    (op?`<div style="margin-top:6px;font-size:13px;line-height:1.5">${esc(s.summary||'')}</div>${(s.impacts||[]).map(i=>`<div class="why" style="color:var(--mut);font-weight:500">• ${esc(i.market||'')}: ${esc(i.direction||'')}${i.detail?' ('+esc(i.detail)+')':''}</div>`).join('')}<div class="mut" style="font-size:11px;margin-top:6px">Source reliability ${Math.round((s.source_reliability||0)*100)}%${/^https?:\/\//.test(s.source_url||'')?` · <a href="${esc(s.source_url)}" target="_blank" rel="noopener" style="color:var(--cy)">source</a>`:''}</div>`:`<div class="mut" style="font-size:11px;margin-top:4px">${esc(String(s.summary||'').slice(0,90))}… tap to read more</div>`)+`</div>`});
+  // predictions
+  h+=`<div class="sec">Its open calls</div>`;
+  if(!open.length)h+=`<div class="note">No open calls.</div>`;
+  open.slice(0,12).forEach(p=>{h+=`<div class="rank" style="cursor:default"><div style="min-width:0"><div class="nm"><b>${esc(p.subject||'')}</b></div><div class="mut" style="font-size:12px">${esc(p.market||'')} · ${esc(p.predicted_direction||'')}</div></div><div class="v">${Math.round((p.confidence||0)*100)}%<small>${esc(p.sport||'')}</small></div></div>`});
+  const gr=res.slice(-8).reverse();
+  if(gr.length){h+=`<div class="sec">Graded</div>`;gr.forEach(r=>{const p=preds.find(x=>x.id===(r.id||r.prediction_id))||{};h+=`<div class="rank" style="cursor:default"><div class="g" style="background:${r.correct?'#16a34a':'#e11d48'}">${r.correct?'✓':'✗'}</div><div style="min-width:0"><div class="nm"><b>${esc(p.subject||r.subject||r.id||'')}</b></div><div class="mut" style="font-size:12px">${esc(r.notes||p.market||'')}</div></div></div>`})}
+  // lessons
+  const lt=D.skills&&D.skills.body&&D.skills.body.text;
+  if(lt){const op=ROPEN.skills;h+=`<div class="sec">What it has learned</div><div class="panel" data-rtoggle="skills" style="cursor:pointer"><div style="white-space:pre-wrap;font-size:13px;line-height:1.5">${esc(op?lt:lt.slice(0,420)+(lt.length>420?'…':''))}</div><div class="mut" style="font-size:11px;margin-top:6px">${op?'Tap to collapse':'Tap to read all'}</div></div>`}
+  // council log
+  if(RLOG.length){h+=`<div class="sec">Researcher log</div>`;RLOG.slice(0,8).forEach((e,i)=>{const d=new Date(e.at).toLocaleString('en-US',{month:'short',day:'numeric',hour:'numeric',minute:'2-digit',timeZone:'America/Chicago'}),k='log'+i,op=ROPEN[k];
+    h+=`<div class="rank" data-rtoggle="${k}" style="display:block"><div class="row"><b>${e.mode==='council'?'🤝 Council':'🔬 Question'}</b><span class="mut" style="font-size:11px">${d}</span></div><div class="ln" style="margin-top:4px">${esc(rTldr(e.text)||rText(e.text).slice(0,110)+'…')}</div>`+(op?`${e.q?`<div class="wp" style="text-align:left">You asked: ${esc(e.q)}</div>`:''}${e.researcher?`<div style="margin-top:8px;white-space:pre-wrap;font-size:13px;line-height:1.5"><b>Researcher:</b>\n${esc(e.researcher)}</div>`:''}<div style="margin-top:8px;white-space:pre-wrap;font-size:13px;line-height:1.5">${e.researcher?'<b>Brain:</b>\n':''}${esc(rText(e.text))}</div>`:`<div class="mut" style="font-size:11px;margin-top:4px">Tap to read more</div>`)+`</div>`})}
+  // import
+  h+=`<div class="sec">Import its files</div><div class="panel"><div class="note" style="text-align:left;margin:0 0 8px">The daily run files itself here automatically. You can also pick the files it produced (research_*.json, briefing_*.md, predictions.jsonl, results.jsonl, scorecard.json, skills.md).</div><label class="btn" for="rfile" style="display:block;text-align:center">📂 Choose files</label><input type="file" id="rfile" multiple accept=".json,.jsonl,.md,.txt" style="display:none">${RB.imp?`<div class="note" style="text-align:left">${esc(RB.imp)}</div>`:''}</div>`;
+  h+=`<div class="note" style="margin-top:12px">The Researcher has its own brain and never places bets. The main Brain sees its notes as outside intel and keeps your plan and stake caps.</div>`;
+  return h;
+}
+function bvToggle(){return `<div class="filters" style="margin:4px 0 0"><button class="chip ${BV==='main'?'on':''}" data-bv="main">🧠 Main Brain</button><button class="chip ${BV==='researcher'?'on':''}" data-bv="researcher">🔬 Researcher</button></div>`}
+function brainHTML(){return bvToggle()+(BV==='researcher'?researcherHTML():mainBrainHTML())}
+function mainBrainHTML(){
   let h=`<div class="sec">The Brain</div>`;
   if(!HIST.loaded||!S||!AN)return h+emptyCard('Waking up…','Reading your betting history');
   const nodes=nodeList(),ln=nodes.filter(n=>n.learned),lv=1+Math.floor(ln.reduce((a,n)=>a+n.level,0)/4);
@@ -1360,7 +1473,7 @@ function brainHTML(){
   h+=`<div class="sec">Market scans</div><div class="panel"><div class="row"><b>${SCAN.n} scan${SCAN.n===1?'':'s'} done</b><span class="mut" style="font-size:12px">${SCAN.at?'last '+new Date(SCAN.at).toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit',timeZone:'America/Chicago'}):'never'}</span></div><div class="note" style="text-align:left;margin-top:8px">Scanning reads every open Kalshi player prop and grows the Market Reader branch: price bands, stat mix, habit matches and edge spots. More scans unlock more sub-skills.</div>${MKT.list.length?'':`<div class="note" style="color:var(--or)">No markets loaded yet.</div>`}</div>`;
   {const c=calib();h+=`<div class="sec">Self-check · is the Brain right?</div><div class="panel">`+(c.n?`<div class="stats" style="grid-template-columns:repeat(3,minmax(0,1fr));margin-top:0"><div class="stat"><b>${c.n}</b><span>Graded calls</span></div><div class="stat"><b>${pc(c.hr)}</b><span>Actually hit</span></div><div class="stat"><b>${pc(c.ap)}</b><span>Predicted</span></div></div>${c.bk.map(b=>`<div class="barrow"><span class="mut" style="width:62px;font-size:12px">${b.lab}</span><div class="bar sm"><i style="width:${b.hit*100}%"></i></div><b>${pc(b.hit)} <small class="mut">(${b.n})</small></b></div>`).join('')}<div class="note" style="text-align:left">Error score: Brain ${c.bB.toFixed(3)} vs market ${c.bM.toFixed(3)} (lower is better). ${c.bB<c.bM?'The Brain is beating the market so far.':'The market is still at least as accurate. Trust it more until the Brain beats it.'}</div>`:`<div class="note" style="text-align:left;margin:0">The Brain logs its hit chances on today's props and grades itself after the games finish. ${c.open||0} calls waiting. Needs real results before it can claim any edge.</div>`)+`</div>`}
   h+=disciplineHTML();
-  h+=`<div class="sec">Ask the Brain · AI</div><div class="panel"><input id="aiq" class="fld" style="margin-top:0" value="${esc(AI.q)}" placeholder="Ask anything, or leave blank for a full read"><button data-ai="1" class="btn" style="margin-top:10px;width:100%" ${AI.busy?'disabled':''}>${AI.busy?'Thinking…':'🧠 Get AI read'}</button><div style="height:1px;background:rgba(100,116,139,.2);margin:16px 0"></div>${sliderHTML()}<div class="note" style="margin-top:8px">Set a target multiplier and the Brain hunts the open props for the best parlay near it.</div></div>${aiResultHTML()}`+logHTML();
+  h+=`<div class="sec">Ask the Brain · AI</div><div class="panel"><input id="aiq" class="fld" style="margin-top:0" value="${esc(AI.q)}" placeholder="Ask anything, or leave blank for a full read"><button data-ai="1" class="btn" style="margin-top:10px;width:100%" ${AI.busy?'disabled':''}>${AI.busy?'Thinking…':'🧠 Get AI read'}</button><div style="display:flex;gap:8px;margin-top:8px;align-items:center;flex-wrap:wrap"><button class="chip ${RUSE?'on':''}" data-ruse="1">🔬 Use Researcher intel</button><button class="chip" data-rcouncil="1">🤝 Council with Researcher</button></div><div style="height:1px;background:rgba(100,116,139,.2);margin:16px 0"></div>${sliderHTML()}<div class="note" style="margin-top:8px">Set a target multiplier and the Brain hunts the open props for the best parlay near it.</div></div>${aiResultHTML()}`+logHTML();
   h+=`<div class="note" style="margin-top:12px">${DBOK?'Skills are saved to your account.':'Skills are saved on this device.'} The Brain learns from your own settled bets and the open markets. It can't see other traders' positions.</div>`;
   return h;
 }
@@ -1495,6 +1608,12 @@ document.addEventListener('click',e=>{
   if(b.id==='out'){AUTH=null;saveAuth();TICKETS=[];LEGS=[];GAMES=[];BETS=[];S=null;HIST={loaded:false,ok:false,err:'',at:0};MKT={loaded:false,ok:false,err:'',at:0,list:[]};DBS={};DBLOADED=false;TAB='live';PS={ok:false,err:'',at:0,loaded:false};F={games:{},stats:{},ok:false,err:'',at:0};LAST='';render();return}
   if(b.dataset.f){filter=b.dataset.f;render();return}
   if(b.dataset.pf){PFILTER=b.dataset.pf;render();return}
+  if(b.dataset.bv){BV=b.dataset.bv;try{localStorage.setItem('pt-bv',BV)}catch(x){}if(BV==='researcher'){RB.busy=false;loadResearcher()}LAST='';render();window.scrollTo(0,0);return}
+  if(b.dataset.ruse){RUSE=!RUSE;try{localStorage.setItem('pt-ruse',RUSE?'1':'0')}catch(x){}LAST='';render();return}
+  if(b.dataset.rask){askResearcher(b.dataset.rask);return}
+  if(b.dataset.rcouncil){if(BV!=='researcher'){BV='researcher';try{localStorage.setItem('pt-bv',BV)}catch(x){}}askResearcher('council');window.scrollTo(0,0);return}
+  if(b.dataset.rsigf){RSIGF=b.dataset.rsigf;LAST='';render();return}
+  if(b.dataset.rreload){RB.busy=false;loadResearcher();return}
   if(b.dataset.tab){TAB=b.dataset.tab;SHEET=null;LAST='';render();window.scrollTo(0,0);return}
 });
 document.addEventListener('click',e=>{
@@ -1516,6 +1635,9 @@ document.addEventListener('click',e=>{const t=e.target.closest&&e.target.closest
   let n=v==='custom'?parseFloat((document.getElementById('tgtc')||{}).value):+v;if(!(n>=1.5))return;n=Math.min(500,n);TARGET=n;PICKING=false;try{localStorage.setItem('pt-target',String(n))}catch(x){}render()});
 document.addEventListener('pointerdown',e=>{if(e.target.dataset&&e.target.dataset.pslide!==undefined)SLIDING=true});
 ['pointerup','pointercancel','touchend'].forEach(ev=>document.addEventListener(ev,()=>{setTimeout(()=>{SLIDING=false},400)}));
+document.addEventListener('click',e=>{const l=e.target.closest&&e.target.closest('[data-rsig],[data-rtoggle]');if(!l)return;const k=l.dataset.rsig||l.dataset.rtoggle;ROPEN[k]=!ROPEN[k];LAST='';render()});
+document.addEventListener('input',e=>{if(e.target.id==='raiq')RAI.q=e.target.value});
+document.addEventListener('change',async e=>{if(e.target.id==='rfile'&&e.target.files.length){const fl=[...e.target.files];e.target.value='';await importResearcher(fl)}});
 document.addEventListener('change',async e=>{if(e.target.id==='pfile'&&e.target.files[0]){try{PROF.pic=await picResize(e.target.files[0]);saveProf();render()}catch(x){}}});
 document.addEventListener('input',e=>{if(e.target.id==='pname'){PROF.name=e.target.value;saveProf();return}if(e.target.dataset&&e.target.dataset.pslide!==undefined){const id=+e.target.dataset.pslide,G=PG[id];if(G){SEL[G.sk]=+e.target.value;const d=document.getElementById('pd'+id);if(d)d.innerHTML=pgDyn(id);LAST=''}return}
 if(e.target.id==='mq'){MQ=e.target.value;const l=document.getElementById('mlist');if(l)l.innerHTML=mlistHTML();LAST='';return}
