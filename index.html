@@ -35,7 +35,7 @@ body{padding:12px 12px 70px;max-width:660px;margin:0 auto;position:relative;min-
 body{padding-bottom:96px}
 .top.slim{padding:10px 14px}
 .nav{position:fixed;left:0;right:0;bottom:0;z-index:20;display:flex;justify-content:space-around;padding:8px 6px calc(8px + env(safe-area-inset-bottom));background:rgba(2,8,16,.9);backdrop-filter:blur(12px);border-top:1px solid var(--cy);box-shadow:0 -8px 30px rgba(0,240,255,.25)}
-.nav button{flex:1;max-width:110px;background:none;border:0;color:var(--mut);font:700 10px Orbitron,sans-serif;letter-spacing:.1em;text-transform:uppercase;padding:6px 0;display:flex;flex-direction:column;align-items:center;gap:3px}
+.nav button{flex:1;max-width:110px;background:none;border:0;color:var(--mut);font:700 9px Orbitron,sans-serif;letter-spacing:.04em;text-transform:uppercase;padding:6px 0;display:flex;flex-direction:column;align-items:center;gap:3px}
 .nav button i{font-style:normal;font-size:20px;line-height:1}
 .nav button.on{color:var(--cy);text-shadow:0 0 12px var(--cy)}
 .nav button.on i{filter:drop-shadow(0 0 8px var(--cy))}
@@ -377,7 +377,7 @@ function liveHTML(){
 }
 function render(){
   if(!AUTH){const h=loginView();if(h!==LAST){LAST=h;$('app').innerHTML=h}tags([]);return}
-  const body=TAB==='live'?liveHTML():TAB==='history'?histHTML():TAB==='stats'?statsHTML():TAB==='picks'?picksHTML():brainHTML();
+  const body=TAB==='live'?liveHTML():TAB==='history'?histHTML():TAB==='stats'?statsHTML():TAB==='picks'?picksHTML():TAB==='parlays'?parlaysHTML():brainHTML();
   const h=(TAB==='live'?'':hdrHTML())+body+navHTML()+sheetHTML();
   if(h!==LAST){LAST=h;$('app').innerHTML=h}
   tags(GAMES);tick();
@@ -661,6 +661,34 @@ function statsHTML(){
   else h+=`<div class="sec">Most correct · teams</div><div class="panel mut">${TEAMSTATE==='failed'?'Team lookup unavailable right now':'Matching players to teams…'}</div>`;
   return h;
 }
+function parlaysHTML(){
+  let h=`<div class="sec">Today's parlays</div>`;
+  if(!MKT.loaded)return h+emptyCard('Scanning Kalshi…','Loading open player-prop markets');
+  if(!MKT.ok&&!MKT.list.length)return h+emptyCard("Can't load markets",`<span style="color:var(--or)">${esc(MKT.err)}</span>`);
+  const td=new Date().toLocaleDateString('en-CA',{timeZone:'America/Chicago'}).replace(/-/g,'');
+  let all=picks().filter(x=>!x.held);
+  let L=all.filter(x=>x.p.date===td);let note='';
+  if(L.length<2){L=all;note='No more props open for today, so these use the next open games.'}
+  L=L.sort((a,b)=>b.rank-a.rank);
+  const build=n=>{const g=new Set(),pl=new Set(),r=[];for(const x of L){if(r.length>=n)break;if(g.has(x.p.ev)||pl.has(x.p.name))continue;g.add(x.p.ev);pl.add(x.p.name);r.push(x)}return r};
+  const safeL=[...L].sort((a,b)=>b.chance-a.chance);
+  const buildSafe=n=>{const g=new Set(),r=[];for(const x of safeL){if(r.length>=n)break;if(g.has(x.p.ev))continue;g.add(x.p.ev);r.push(x)}return r};
+  const sets=[['Safest','Highest Kalshi chance, one leg per game',buildSafe(2)],['Brain balanced','Ranked by chance + your habits',build(3)],['Brain reach','Bigger payout, much lower hit rate',build(4)]];
+  const learned=S&&S.legs>=10;
+  h+=`<div class="note" style="margin:0 0 8px">Built with the Brain's ranking: 60% Kalshi chance, 40% fit to your habits${learned?'':' (still learning, so mostly chance for now)'}. One leg per game, one per player. Chance is the market price, not a promise. Not financial advice.</div>`;
+  if(note)h+=`<div class="note" style="color:var(--or);margin:0 0 8px">${note}</div>`;
+  sets.forEach(st=>{
+    const legs=st[2];if(legs.length<2)return;
+    const prod=legs.reduce((a,x)=>a*x.chance,1);const fit=legs.reduce((a,x)=>a+x.fit,0)/legs.length;
+    h+=`<div class="gh" style="margin-bottom:12px"><div class="gt">${st[0]} · ${legs.length} legs</div><div class="wp" style="margin:2px 0 8px">${st[1]}</div>`;
+    legs.forEach(x=>{const lab=x.p.stat.map(i=>['PTS','REB','AST'][i]).join('·');
+      h+=`<div class="lh" style="margin-bottom:8px"><div class="av ${x.side==='yes'?'ay':'an'}">${ini(x.p.name)}</div><div class="who"><div class="nm">${esc(x.p.name)}</div><div class="ln"><span class="side ${x.side==='yes'?'s-yes':'s-no'}">${x.side.toUpperCase()}</span>${x.p.thr}+ ${lab} · ${x.p.away}@${x.p.home}</div>${x.why.length?`<div class="why">${x.why.map(esc).join(' · ')}</div>`:''}</div><div class="pct"><b>${Math.round(x.chance*100)}%</b><span>Leg</span></div></div>`});
+    h+=`<div class="wp" style="color:var(--or)">All ${legs.length} must hit: ~${(prod*100).toFixed(0)}% · habit fit ${Math.round(fit*100)} · fair payout ~${(1/prod).toFixed(1)}x</div></div>`;
+  });
+  if(!sets.some(st=>st[2].length>=2))h+=emptyCard('Not enough games open','Need props from at least 2 different games. Check back closer to tip-off.');
+  h+=`<div class="sec" style="margin-top:14px">Ask the AI Brain</div><button data-ai="parlay" class="btn" style="width:100%">${AI.busy?'Thinking…':'🧠 Have the AI build my parlay'}</button>${AI.err?`<div class="note" style="color:var(--or);margin-top:8px">${esc(AI.err)}</div>`:''}${AI.text?`<div class="panel" style="margin-top:8px;padding:10px;white-space:pre-wrap;font-size:14px;line-height:1.45">${esc(AI.text)}</div>`:''}`;
+  return h;
+}
 function picksHTML(){
   let h=`<div class="sec">Recommended</div><div class="filters">${[['best','Best fit'],['safe','Safest'],['yes','YES'],['no','NO']].map(f=>`<button class="chip ${PFILTER===f[0]?'on':''}" data-pf="${f[0]}">${f[1]}</button>`).join('')}</div>`;
   if(!MKT.loaded)return h+emptyCard('Scanning Kalshi…','Loading open player-prop markets');
@@ -723,7 +751,7 @@ function sheetHTML(){
   return h+`</div></div>`;
 }
 function navHTML(){
-  const T=[['live','◉','Live'],['history','☰','History'],['stats','▦','Stats'],['picks','★','Picks'],['brain','✦','Brain']];
+  const T=[['live','◉','Live'],['history','☰','History'],['stats','▦','Stats'],['picks','★','Picks'],['parlays','⚡','Parlays'],['brain','✦','Brain']];
   return `<nav class="nav">${T.map(t=>`<button data-tab="${t[0]}" class="${TAB===t[0]?'on':''}"><i>${t[1]}</i>${t[2]}</button>`).join('')}</nav>`+(TOASTS.length?`<div class="toasts">${TOASTS.map(t=>`<div class="toast">${esc(t)}</div>`).join('')}</div>`:'');
 }
 
@@ -748,7 +776,7 @@ if(AUTH){pollPos();pollHist();pollMkts()}
 setInterval(pollPos,5000);setInterval(pollHist,60000);setInterval(pollMkts,30000);
 setInterval(pollEspn,1000);
 document.addEventListener('input',e=>{if(e.target.id==='aiq')AI.q=e.target.value});
-document.addEventListener('click',e=>{if(e.target.closest&&e.target.closest('[data-ai]'))askBrain()});
+document.addEventListener('click',e=>{var b=e.target.closest&&e.target.closest('[data-ai]');if(b){if(b.dataset.ai==='parlay')AI.q='Build me ONE parlay of 2-4 legs from the open picks for today. One leg per game. For each leg say why it fits my habits, give the combined hit chance, and tell me honestly if I should skip parlays today.';askBrain()}});
 </script>
 </body>
 </html>
